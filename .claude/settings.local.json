@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item *)",
+      "Bash(npx tsc *)",
+      "Bash(python3 *)",
+      "PowerShell($d = Get-Content \"C:\\\\test\\\\Inoob-inoob-pi\\\\artifacts\\\\api-server\\\\src\\\\data\\\\sunoTagDictionary.json\" | ConvertFrom-Json; $tags = $d.tags; Write-Host \"Total tags: $\\($tags.Count\\)\"; $tags | Group-Object category | Select-Object Name, Count | Format-Table; $tags | Group-Object grade | Select-Object Name, Count | Format-Table)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(pnpm --filter @workspace/api-server run typecheck)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(Test-Path *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
