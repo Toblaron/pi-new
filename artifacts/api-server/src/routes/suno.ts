@@ -16,7 +16,7 @@ import { fuseMetadata, type FusedMetadata } from "../lib/metadataFusion.js";
 import { retryFetch } from "../lib/retryFetch.js";
 import { trackUsage } from "../lib/costTracker.js";
 
-const AI_MODEL      = process.env.AI_MODEL      ?? "gpt-5.2";
+const AI_MODEL      = process.env.AI_MODEL      ?? "gpt-4o";
 const AI_MINI_MODEL = process.env.AI_MINI_MODEL ?? "gpt-4.1-mini";
 
 const router: IRouter = Router();
@@ -332,7 +332,9 @@ async function fetchLyricsFromGenius(artist: string, title: string): Promise<{ l
  */
 async function fetchMusicBrainzData(artist: string, title: string, durationSec?: number): Promise<MusicBrainzData> {
   try {
-    const query = `recording:"${title}" AND artist:"${artist}"`;
+    const query = artist.trim()
+      ? `recording:"${title}" AND artist:"${artist}"`
+      : `recording:"${title}"`;
     const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=5&inc=releases+genres+isrcs`;
     const resp = await retryFetch(url, {
       headers: {
@@ -540,7 +542,10 @@ async function fetchBaseMetadata(url: string): Promise<BaseVideoMetadata> {
 
   // Step 2: Enrich with ytdl-core (description, keywords, captions, duration) — best-effort
   try {
-    const info = await ytdl.getInfo(url);
+    const info = await Promise.race([
+      ytdl.getInfo(url),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ytdl timeout")), 10000)),
+    ]);
     const details = info.videoDetails;
     durationSeconds = parseInt(details.lengthSeconds, 10);
     description = details.description ?? "";
@@ -2057,8 +2062,8 @@ router.get("/suggest", async (req, res) => {
   const title = (req.query.title as string ?? "").trim();
   const artist = (req.query.artist as string ?? "").trim();
 
-  if (!title || !artist) {
-    res.status(400).json({ error: "title and artist query params are required" });
+  if (!title) {
+    res.status(400).json({ error: "title query param is required" });
     return;
   }
 
@@ -2073,25 +2078,29 @@ router.get("/suggest", async (req, res) => {
         try {
           const completion = await openai.chat.completions.create({
             model: AI_MINI_MODEL,
-            max_completion_tokens: 120,
+            max_completion_tokens: 400,
             response_format: { type: "json_object" },
             messages: [
               {
                 role: "system",
-                content: `You are a music genre expert. Given a song title and artist, return a JSON object with ONLY these fields:
+                content: `You are a music expert. Given a song title and artist, return a JSON object with ONLY these fields:
 - "genres": array of 1–3 genre names from this list ONLY: Pop, Dance Pop, Indie Pop, Synth-Pop, Dream Pop, Art Pop, Electropop, Britpop, Rock, Alternative Rock, Indie Rock, Hard Rock, Classic Rock, Punk, Post-Punk, Grunge, Shoegaze, Psychedelic Rock, Progressive Rock, Garage Rock, Folk Rock, Arena Rock, New Wave, Emo, Post-Rock, Stoner Rock, Hip-Hop, Trap, Rap, Drill, Boom Bap, Gangsta Rap, G-Funk, Grime, Cloud Rap, Phonk, R&B, Soul, Neo-Soul, Funk, Disco, Motown, Gospel, Contemporary R&B, Jazz, Smooth Jazz, Bebop, Swing, Jazz Fusion, Big Band, Acid Jazz, Cool Jazz, Latin Jazz, Free Jazz, Metal, Heavy Metal, Black Metal, Death Metal, Thrash Metal, Nu Metal, Metalcore, Power Metal, Doom Metal, Symphonic Metal, Djent, Country, Americana, Bluegrass, Folk, Indie Folk, Outlaw Country, Country Rock, Country Pop, Alt-Country, Classical, Orchestral, Baroque, Cinematic, Film Score, Opera, Minimalist, Reggae, Dancehall, Reggaeton, Latin Pop, Bossa Nova, Flamenco, Salsa, K-Pop, J-Pop, Afrobeats, Blues, Delta Blues, Chicago Blues, Electric Blues, House, Deep House, Tech House, Progressive House, Acid House, Melodic House, Afro House, Soulful House, Chicago House, Nu Disco, Techno, Berlin Techno, Detroit Techno, Minimal Techno, Hard Techno, Dub Techno, Trance, Progressive Trance, Uplifting Trance, Psytrance, Goa Trance, Vocal Trance, Future Rave, Drum & Bass, Liquid DnB, Neurofunk, Darkstep, Jump Up, Jungle, Dubstep, Post-Dubstep, Brostep, Riddim, Future Bass, Breakbeat, Big Beat, Glitch Hop, Synthwave, Darksynth, Outrun, Retrowave, Chillwave, Hi-NRG, Italo Disco, Futurepop, Electro, EBM, Industrial, Darkwave, Cold Wave, EDM, Big Room, Electro House, Ambient, Dark Ambient, IDM, Glitch, Space Music, Drone Ambient, New Age, Trip-Hop, Downtempo, Chillhop, Lo-Fi, Vaporwave, Future Funk, Hardcore, Gabber, Hardstyle, UK Garage, 2-Step, Grime, UK Bass, Phonk, Memphis Phonk, Hyperpop, Amapiano, Gqom, Baile Funk, Footwork
 - "era": one of: 50s, 60s, 70s, 80s, 90s, 2000s, 2010s, modern
 - "energy": one of: very chill, chill, medium, high, intense
-- "tempo": one of: ballad, slow, mid, groove, uptempo, fast, hyper`,
+- "tempo": one of: ballad, slow, mid, groove, uptempo, fast, hyper
+- "vocals": one of: auto, male, female, mixed, duet, no vocals
+- "moods": array of 1–4 from: Dark, Euphoric, Nostalgic, Melancholic, Aggressive, Romantic, Dreamy, Rebellious, Playful, Mysterious, Cinematic, Hopeful, Angry, Tender, Haunted, Triumphant, Vulnerable, Defiant, Serene, Intense, Wistful, Bittersweet, Groovy, Frantic, Ethereal, Hypnotic, Brooding, Raw, Gritty, Majestic, Eerie, Sensual, Savage, Soulful, Cathartic, Blissful, Chaotic, Anxious, Desolate, Primal, Lush, Fierce, Longing, Psychedelic, Icy, Dusty, Tense, Laid-back, Transcendent, Unsettling, Festive, Murky, Euphoric-Sad, Punchy, Stormy, Intimate, Epic, Uneasy, Crystalline, Quirky
+- "instruments": array of 1–5 from: Piano, Guitar, Synth, Strings, Bass, Choir, Brass, Drums, Violin, Flute, Organ, Sitar, Cello, Saxophone, Trumpet, Harp, Banjo, Ukulele, Mandolin, Marimba, Theremin, Mellotron, Pedal Steel, Dulcimer, 808, Acoustic Guitar, Electric Guitar, Harmonica, Accordion, Vibraphone, Glockenspiel, Rhodes, Clarinet, Oboe, French Horn, Tabla, Congas, Sub Bass, Pad, Wurlitzer, Harpsichord, Bagpipes, Moog, Oud, Koto, Erhu, Steel Drums, Trombone, Bassoon, Bansuri, Lap Steel, Didgeridoo
+- "nudge": a 3–8 word creative style descriptor for this song (e.g. "punchy 808s with cinematic strings")`,
               },
               {
                 role: "user",
-                content: `Song: "${title}" by ${artist}`,
+                content: artist ? `Song: "${title}" by ${artist}` : `Song: "${title}"`,
               },
             ],
-          });
+          }, { timeout: 9000 });
           const raw = completion.choices[0]?.message?.content ?? "{}";
-          return JSON.parse(raw) as { genres?: string[]; era?: string; energy?: string; tempo?: string };
+          return JSON.parse(raw) as { genres?: string[]; era?: string; energy?: string; tempo?: string; vocals?: string; moods?: string[]; instruments?: string[]; nudge?: string };
         } catch {
           return {};
         }
@@ -2101,17 +2110,31 @@ router.get("/suggest", async (req, res) => {
     const mbTags = mbData.genres ?? [];
     const mbGenres = mapMbTagsToGenres(mbTags);
 
-    // Merge: AI provides genres/energy/tempo, MusicBrainz provides era (more accurate release year)
+    // Merge: AI provides genres/energy/tempo/vocals/moods/instruments/nudge, MusicBrainz provides era
+    const VALID_ERAS = new Set(["50s", "60s", "70s", "80s", "90s", "2000s", "2010s", "modern"]);
+    const VALID_ENERGIES = new Set(["very chill", "chill", "medium", "high", "intense"]);
+    const VALID_TEMPOS = new Set(["ballad", "slow", "mid", "groove", "uptempo", "fast", "hyper"]);
+    const VALID_VOCALS = new Set(["auto", "male", "female", "mixed", "duet", "no vocals"]);
+    const VALID_MOODS = new Set(["Dark","Euphoric","Nostalgic","Melancholic","Aggressive","Romantic","Dreamy","Rebellious","Playful","Mysterious","Cinematic","Hopeful","Angry","Tender","Haunted","Triumphant","Vulnerable","Defiant","Serene","Intense","Wistful","Bittersweet","Groovy","Frantic","Ethereal","Hypnotic","Brooding","Raw","Gritty","Majestic","Eerie","Sensual","Savage","Soulful","Cathartic","Blissful","Chaotic","Anxious","Desolate","Primal","Lush","Fierce","Longing","Psychedelic","Icy","Dusty","Tense","Laid-back","Transcendent","Unsettling","Festive","Murky","Euphoric-Sad","Punchy","Stormy","Intimate","Epic","Uneasy","Crystalline","Quirky"]);
+    const VALID_INSTRUMENTS = new Set(["Piano","Guitar","Synth","Strings","Bass","Choir","Brass","Drums","Violin","Flute","Organ","Sitar","Cello","Saxophone","Trumpet","Harp","Banjo","Ukulele","Mandolin","Marimba","Theremin","Mellotron","Pedal Steel","Dulcimer","808","Acoustic Guitar","Electric Guitar","Harmonica","Accordion","Vibraphone","Glockenspiel","Rhodes","Clarinet","Oboe","French Horn","Tabla","Congas","Sub Bass","Pad","Wurlitzer","Harpsichord","Bagpipes","Moog","Oud","Koto","Erhu","Steel Drums","Trombone","Bassoon","Bansuri","Lap Steel","Didgeridoo"]);
+
     const mbEra = yearToEra(mbData.releaseYear);
     const aiGenres = (aiSuggestion.genres ?? []).filter((g) => typeof g === "string").slice(0, 3);
     const genres = aiGenres.length > 0 ? aiGenres : mbGenres;
-    const era = mbEra ?? (aiSuggestion.era as string | null) ?? null;
-    const energy = (aiSuggestion.energy as string | null) ?? inferEnergy(genres);
-    const tempo = (aiSuggestion.tempo as string | null) ?? inferTempo(genres);
+    const aiEra = typeof aiSuggestion.era === "string" && VALID_ERAS.has(aiSuggestion.era) ? aiSuggestion.era : null;
+    const era = mbEra ?? aiEra;
+    const aiEnergy = typeof aiSuggestion.energy === "string" && VALID_ENERGIES.has(aiSuggestion.energy) ? aiSuggestion.energy : null;
+    const aiTempo = typeof aiSuggestion.tempo === "string" && VALID_TEMPOS.has(aiSuggestion.tempo) ? aiSuggestion.tempo : null;
+    const energy = aiEnergy ?? inferEnergy(genres);
+    const tempo = aiTempo ?? inferTempo(genres);
+    const vocals = typeof aiSuggestion.vocals === "string" && VALID_VOCALS.has(aiSuggestion.vocals) && aiSuggestion.vocals !== "auto" ? aiSuggestion.vocals : null;
+    const moods = (aiSuggestion.moods ?? []).filter((m): m is string => typeof m === "string" && VALID_MOODS.has(m)).slice(0, 4);
+    const instruments = (aiSuggestion.instruments ?? []).filter((i): i is string => typeof i === "string" && VALID_INSTRUMENTS.has(i)).slice(0, 5);
+    const nudge = typeof aiSuggestion.nudge === "string" && aiSuggestion.nudge.trim().length > 0 ? aiSuggestion.nudge.trim() : null;
 
-    console.log(`[suggest] ${artist} – ${title} → AI genres:[${genres.join(",")}] MB era:${mbEra} AI era:${aiSuggestion.era} energy:${energy} tempo:${tempo}`);
+    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] nudge:"${nudge}"`);
 
-    res.json({ genres, era, energy, tempo, vocals: null, songTitle: title, artist, mbTags });
+    res.json({ genres, era, energy, tempo, vocals, moods, instruments, nudge, songTitle: title, artist, mbTags });
   } catch (err) {
     console.error("suggest error:", err);
     res.status(500).json({ error: "Could not fetch suggestions" });
@@ -2149,9 +2172,12 @@ router.get("/youtube-preview", async (req, res) => {
 
   // ── Strategy 2: ytdl-core (has richer data but often blocked on RPi) ──
   try {
-    const info = await ytdl.getBasicInfo(url, {
-      requestOptions: { headers: { "User-Agent": "Mozilla/5.0", "Accept-Language": "en-US,en;q=0.9" } },
-    });
+    const info = await Promise.race([
+      ytdl.getBasicInfo(url, {
+        requestOptions: { headers: { "User-Agent": "Mozilla/5.0", "Accept-Language": "en-US,en;q=0.9" } },
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("ytdl timeout")), 5000)),
+    ]);
     const vd = info.videoDetails;
     const { cleanTitle, cleanArtist } = cleanSongTitle(vd.title ?? "", vd.author?.name ?? "");
     const thumb = vd.thumbnails?.sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0]?.url ?? thumbFallback;
@@ -2163,11 +2189,43 @@ router.get("/youtube-preview", async (req, res) => {
       thumbnail: thumb,
       duration: vd.lengthSeconds ? formatDuration(Number(vd.lengthSeconds)) : null,
     });
-  } catch (err) {
-    console.error("[youtube-preview] all strategies failed:", (err as Error).message?.slice(0, 120));
-    // Still return partial data (thumbnail always works)
-    res.json({ title: "", cleanTitle: "", author: "", thumbnail: thumbFallback, duration: null });
+  } catch {
+    // fall through to Strategy 3
   }
+
+  // ── Strategy 3: Parse og:title from YouTube page HTML ──
+  if (videoId) {
+    try {
+      const pageResp = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (pageResp.ok) {
+        const html = await pageResp.text();
+        const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+          ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+        if (m?.[1]) {
+          const rawTitle = m[1]
+            .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+          const { cleanTitle, cleanArtist } = cleanSongTitle(rawTitle, "");
+          if (cleanTitle) {
+            console.log(`[youtube-preview] HTML fallback OK: "${cleanTitle}" by "${cleanArtist}"`);
+            res.json({ title: rawTitle, cleanTitle, author: cleanArtist || "", thumbnail: thumbFallback, duration: null });
+            return;
+          }
+        }
+      }
+    } catch (err3) {
+      console.warn("[youtube-preview] HTML fallback failed:", (err3 as Error).message?.slice(0, 80));
+    }
+  }
+
+  // All strategies exhausted — return thumbnail only
+  console.error("[youtube-preview] all strategies failed");
+  res.json({ title: "", cleanTitle: "", author: "", thumbnail: thumbFallback, duration: null });
 });
 
 /**
@@ -2580,7 +2638,8 @@ router.post("/reverse", async (req, res) => {
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw);
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { parsed = {}; }
     res.json(parsed);
   } catch (err) {
     console.error("[reverse] error:", err);
@@ -2627,7 +2686,8 @@ router.post("/mood-to-settings", async (req, res) => {
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw);
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { parsed = {}; }
     res.json(parsed);
   } catch (err) {
     console.error("[mood-to-settings] error:", err);

@@ -1,6 +1,8 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { trackUsage } from "./costTracker.js";
 
+const AI_MINI_MODEL = process.env.AI_MINI_MODEL ?? "gpt-4.1-mini";
+
 export interface AudioFeatures {
   bpm: number;
   key: string;
@@ -93,7 +95,7 @@ async function fetchAiKnowledge(
 ): Promise<AudioFeatures | null> {
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
+      model: AI_MINI_MODEL,
       max_completion_tokens: 120,
       messages: [
         {
@@ -108,16 +110,16 @@ async function fetchAiKnowledge(
     });
 
     if (completion.usage) {
-      trackUsage("gpt-4.1-mini", completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0, "audio-features");
+      trackUsage(AI_MINI_MODEL, completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0, "audio-features");
     }
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";
     const cleaned = raw.replace(/^```(?:json)?|```$/g, "").trim();
-    const parsed = JSON.parse(cleaned) as {
-      bpm?: number;
-      key?: string;
-      time_signature?: string;
-      confidence?: string;
-    };
+    let parsed: { bpm?: number; key?: string; time_signature?: string; confidence?: string };
+    try {
+      parsed = JSON.parse(cleaned) as typeof parsed;
+    } catch {
+      return null;
+    }
 
     const bpm = Math.round(Number(parsed.bpm));
     const key = normalizeKey(parsed.key ?? "");

@@ -40,8 +40,12 @@ const queryStats = db.prepare<[number]>(`
 
 /** Pricing per 1k tokens: [inputPer1k, outputPer1k] */
 const MODEL_PRICING: Record<string, [number, number]> = {
-  "gpt-5.2": [0.015, 0.060],
-  "gpt-4.1-mini": [0.0004, 0.0016],
+  "gpt-5.2":       [0.015,  0.060],
+  "gpt-4o":        [0.0025, 0.010],
+  "gpt-4o-mini":   [0.00015, 0.0006],
+  "gpt-4.1":       [0.002,  0.008],
+  "gpt-4.1-mini":  [0.0004, 0.0016],
+  "gpt-4.1-nano":  [0.0001, 0.0004],
 };
 
 function estimateCost(model: string, promptTokens: number, completionTokens: number): number {

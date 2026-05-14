@@ -34,7 +34,11 @@ db.exec(`
 // Safely add collection column — no-op if it already exists
 try {
   db.exec(`ALTER TABLE template_history ADD COLUMN collection TEXT`);
-} catch { /* column already exists */ }
+} catch (err) {
+  if (!(err as Error).message?.includes("duplicate column")) {
+    console.warn("[historyStore] Migration warning:", (err as Error).message);
+  }
+}
 
 export interface HistoryEntry {
   id: string;

@@ -331,6 +331,9 @@ interface SuggestedControls {
   energy: string | null;
   tempo: string | null;
   vocals: string | null;
+  moods: string[];
+  instruments: string[];
+  nudge: string | null;
   songTitle: string;
   artist: string;
   mbTags: string[];
@@ -625,6 +628,8 @@ export default function Home() {
     else if (field === "vocals") setVocalGender(val as typeof vocalGender);
     else if (field === "genres") setSelectedGenres([val]);
     else if (field === "instruments") setSelectedInstruments(val.split(",").filter(Boolean));
+    else if (field === "moods") setSelectedMoods(val.split(",").filter(Boolean));
+    else if (field === "nudge") setGenreNudge(val);
     setAutoFilledFields((prev) => { const next = new Set(prev); next.add(field); return next; });
   };
 
@@ -738,13 +743,15 @@ export default function Home() {
     setVideoPreview((prev) => prev ? { ...prev, thumbnail: thumb } : { title: "", author: "", thumbnail: thumb, duration: null });
     setPreviewLoading(true);
     try {
-      const resp = await fetch(`/api/youtube-preview?url=${encodeURIComponent(url)}`);
+      const resp = await fetch(`/api/youtube-preview?url=${encodeURIComponent(url)}`, {
+        signal: AbortSignal.timeout(15000),
+      });
       if (resp.ok) {
         const data = await resp.json() as VideoPreview & { cleanTitle?: string };
         setVideoPreview({ ...data, thumbnail: thumb });
         const artist = data.author ?? "";
         const title = data.cleanTitle ?? data.title ?? "";
-        if (artist && title) {
+        if (title) {
           // Check per-artist memory first — show it as a "remembered" banner
           const saved = getArtistStyle(artist);
           if (saved && (saved.genres?.length || saved.era)) {
@@ -778,9 +785,16 @@ export default function Home() {
               }
             })
             .catch(() => {});
+        } else {
+          // Preview loaded but no title — clear the loading spinner
+          setSuggestLoading(false);
         }
+      } else {
+        setSuggestLoading(false);
       }
-    } catch {}
+    } catch {
+      setSuggestLoading(false);
+    }
     setPreviewLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -794,7 +808,8 @@ export default function Home() {
       });
       if (!resp.ok) return;
       const data = await resp.json() as SuggestedControls;
-      const hasAny = data.genres.length > 0 || data.era || data.energy || data.tempo || data.vocals;
+      const hasAny = data.genres.length > 0 || data.era || data.energy || data.tempo || data.vocals
+        || data.moods?.length > 0 || data.instruments?.length > 0 || data.nudge;
       if (!hasAny) return;
       setSuggestions(data);
       const autoFilled = new Set<string>();
@@ -804,6 +819,11 @@ export default function Home() {
       if (data.energy) { setEnergyLevel(data.energy as typeof energyLevel); autoFilled.add("energy"); savedValues["energy"] = data.energy; }
       if (data.tempo) { setTempo(data.tempo as typeof tempo); autoFilled.add("tempo"); savedValues["tempo"] = data.tempo; }
       if (data.vocals) { setVocalGender(data.vocals as typeof vocalGender); autoFilled.add("vocals"); savedValues["vocals"] = data.vocals; }
+      const validMoods = (data.moods ?? []).filter((m) => MOOD_TAGS.includes(m)).slice(0, MAX_MOODS);
+      if (validMoods.length > 0) { setSelectedMoods(validMoods); autoFilled.add("moods"); savedValues["moods"] = validMoods.join(","); }
+      const validInstruments = (data.instruments ?? []).filter((i) => INSTRUMENT_TAGS.includes(i)).slice(0, MAX_INSTRUMENTS);
+      if (validInstruments.length > 0) { setSelectedInstruments(validInstruments); autoFilled.add("instruments"); savedValues["instruments"] = validInstruments.join(","); }
+      if (data.nudge) { setGenreNudge(data.nudge); autoFilled.add("nudge"); savedValues["nudge"] = data.nudge; }
       setAutoFilledFields(autoFilled);
       setAutoFillValues(savedValues);
     } catch {}
@@ -2298,6 +2318,10 @@ export default function Home() {
                     <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                       <Smile className="w-3 h-3 text-secondary" /> Mood / Vibe
                       <span className="text-[10px] text-zinc-600 font-normal normal-case tracking-normal">(up to {MAX_MOODS})</span>
+                      {autoFilledFields.has("moods") && <AutoBadge />}
+                      {!autoFilledFields.has("moods") && autoFillValues["moods"] && (
+                        <ResetAutoFillButton value="restore" onClick={() => resetAutoFill("moods")} />
+                      )}
                     </label>
                     <div className="flex flex-wrap gap-1.5">
                       {MOOD_TAGS.map((mood) => {
@@ -2307,7 +2331,7 @@ export default function Home() {
                           <button
                             key={mood}
                             type="button"
-                            onClick={() => !isDisabled && setSelectedMoods((p) => toggleSet(p, mood, MAX_MOODS))}
+                            onClick={() => { if (!isDisabled) { setSelectedMoods((p) => toggleSet(p, mood, MAX_MOODS)); clearAutoFill("moods"); } }}
                             className={cn(
                               "px-2.5 py-0.5 font-mono text-[11px] border transition-all",
                               isSelected ? "border-primary text-primary bg-primary/10"
@@ -2438,10 +2462,14 @@ export default function Home() {
                     <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                       <Music2 className="w-3 h-3 text-secondary" /> Custom nudge
                       <span className="text-[10px] text-zinc-600 font-normal normal-case tracking-normal">(free text)</span>
+                      {autoFilledFields.has("nudge") && <AutoBadge />}
+                      {!autoFilledFields.has("nudge") && autoFillValues["nudge"] && (
+                        <ResetAutoFillButton value={autoFillValues["nudge"]} onClick={() => resetAutoFill("nudge")} />
+                      )}
                     </label>
                     <input
                       value={genreNudge}
-                      onChange={(e) => setGenreNudge(e.target.value)}
+                      onChange={(e) => { setGenreNudge(e.target.value); clearAutoFill("nudge"); }}
                       placeholder='e.g. "more trap", "jazz influence", "synthwave vibes"'
                       className="w-full px-3 py-2 rounded-lg bg-background/50 border border-border text-xs text-foreground placeholder:text-zinc-600 focus:outline-none focus:border-primary/50 transition-colors"
                     />
