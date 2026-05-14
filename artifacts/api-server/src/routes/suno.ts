@@ -645,7 +645,9 @@ async function fetchLyricsData(
   }
   if (captionText) {
     console.log(`No lyrics found — using YouTube captions (${captionText.length} chars)`);
-    return { lyricsText: null, lyricsSource: "captions" };
+    const language = detectLanguage(captionText);
+    if (language !== "English") console.log(`Language detected from captions: ${language}`);
+    return { lyricsText: null, lyricsSource: "captions", language };
   }
   console.log("No lyrics or captions found — relying on AI knowledge");
   return { lyricsText: null, lyricsSource: "none" };
@@ -1195,7 +1197,8 @@ async function generateOneTemplate(data: GenerateInput): Promise<ReturnType<type
     metadata = { ...metadata, lyricsText: manualLyrics.trim(), lyricsSource: "user-override" };
   }
 
-  const lyricsStructure = metadata.lyricsText ? analyzeLyricsStructure(metadata.lyricsText) : undefined;
+  const lyricsTextForStructure = metadata.lyricsText ?? (metadata.lyricsSource === "captions" ? metadata.captionText : null);
+  const lyricsStructure = lyricsTextForStructure ? analyzeLyricsStructure(lyricsTextForStructure) : undefined;
 
   const suggestedDefaults = computeSuggestedDefaults({
     bpm: metadata.audioFeatures?.bpm,
@@ -1721,15 +1724,10 @@ router.post("/batch", async (req, res) => {
   };
 
   // Send initial queued status for all tracks
-  const videoIdFromUrl = (u: string): string => {
-    const m = u.match(/(?:v=|youtu\.be\/|\/embed\/)([a-zA-Z0-9_-]{11})/);
-    return m ? m[1] : "";
-  };
-
   const urlList: string[] = urls;
   const tracks = urlList.map((url: string, index: number) => ({
     url,
-    videoId: videoIdFromUrl(url),
+    videoId: videoIdFromUrl(url) ?? "",
     status: "queued" as const,
     index,
   }));
@@ -2084,6 +2082,7 @@ router.get("/suggest", async (req, res) => {
               {
                 role: "system",
                 content: `You are a music expert. Given a song title and artist, return a JSON object with ONLY these fields:
+
 - "genres": array of 1–3 genre names from this list ONLY: Pop, Dance Pop, Indie Pop, Synth-Pop, Dream Pop, Art Pop, Electropop, Britpop, Rock, Alternative Rock, Indie Rock, Hard Rock, Classic Rock, Punk, Post-Punk, Grunge, Shoegaze, Psychedelic Rock, Progressive Rock, Garage Rock, Folk Rock, Arena Rock, New Wave, Emo, Post-Rock, Stoner Rock, Hip-Hop, Trap, Rap, Drill, Boom Bap, Gangsta Rap, G-Funk, Grime, Cloud Rap, Phonk, R&B, Soul, Neo-Soul, Funk, Disco, Motown, Gospel, Contemporary R&B, Jazz, Smooth Jazz, Bebop, Swing, Jazz Fusion, Big Band, Acid Jazz, Cool Jazz, Latin Jazz, Free Jazz, Metal, Heavy Metal, Black Metal, Death Metal, Thrash Metal, Nu Metal, Metalcore, Power Metal, Doom Metal, Symphonic Metal, Djent, Country, Americana, Bluegrass, Folk, Indie Folk, Outlaw Country, Country Rock, Country Pop, Alt-Country, Classical, Orchestral, Baroque, Cinematic, Film Score, Opera, Minimalist, Reggae, Dancehall, Reggaeton, Latin Pop, Bossa Nova, Flamenco, Salsa, K-Pop, J-Pop, Afrobeats, Blues, Delta Blues, Chicago Blues, Electric Blues, House, Deep House, Tech House, Progressive House, Acid House, Melodic House, Afro House, Soulful House, Chicago House, Nu Disco, Techno, Berlin Techno, Detroit Techno, Minimal Techno, Hard Techno, Dub Techno, Trance, Progressive Trance, Uplifting Trance, Psytrance, Goa Trance, Vocal Trance, Future Rave, Drum & Bass, Liquid DnB, Neurofunk, Darkstep, Jump Up, Jungle, Dubstep, Post-Dubstep, Brostep, Riddim, Future Bass, Breakbeat, Big Beat, Glitch Hop, Synthwave, Darksynth, Outrun, Retrowave, Chillwave, Hi-NRG, Italo Disco, Futurepop, Electro, EBM, Industrial, Darkwave, Cold Wave, EDM, Big Room, Electro House, Ambient, Dark Ambient, IDM, Glitch, Space Music, Drone Ambient, New Age, Trip-Hop, Downtempo, Chillhop, Lo-Fi, Vaporwave, Future Funk, Hardcore, Gabber, Hardstyle, UK Garage, 2-Step, Grime, UK Bass, Phonk, Memphis Phonk, Hyperpop, Amapiano, Gqom, Baile Funk, Footwork
 - "era": one of: 50s, 60s, 70s, 80s, 90s, 2000s, 2010s, modern
 - "energy": one of: very chill, chill, medium, high, intense
@@ -2099,6 +2098,9 @@ router.get("/suggest", async (req, res) => {
               },
             ],
           }, { timeout: 9000 });
+          if (completion.usage) {
+            trackUsage(AI_MINI_MODEL, completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0, "suggest");
+          }
           const raw = completion.choices[0]?.message?.content ?? "{}";
           return JSON.parse(raw) as { genres?: string[]; era?: string; energy?: string; tempo?: string; vocals?: string; moods?: string[]; instruments?: string[]; nudge?: string };
         } catch {
@@ -2273,11 +2275,12 @@ router.post("/pre-analyze-structure", async (req, res) => {
       metadata = await fetchAllMetadata(youtubeUrl);
     }
 
-    if (!metadata.lyricsText || metadata.lyricsText.trim().length < 30) {
+    const lyricsForStructure = metadata.lyricsText ?? (metadata.lyricsSource === "captions" ? metadata.captionText : null);
+    if (!lyricsForStructure || lyricsForStructure.trim().length < 30) {
       res.status(404).json({ error: "No lyrics found for this song." });
       return;
     }
-    const structure = analyzeLyricsStructure(metadata.lyricsText);
+    const structure = analyzeLyricsStructure(lyricsForStructure);
     res.json(structure);
   } catch (err) {
     console.error("pre-analyze-structure error:", err);

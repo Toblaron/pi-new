@@ -13,13 +13,13 @@ const INSTRUMENT_PATTERNS: [RegExp, string][] = [
   [/\belectric guitar\b/i, "Electric Guitar"],
   [/\b(lead |rhythm )?guitar\b/i, "Guitar"],
   [/\bpiano\b/i, "Piano"],
-  [/\bkeyboard\b/i, "Keyboards"],
+  [/\bkeyboard\b/i, "Synth"],
   [/\bsynth(esizer)?\b/i, "Synth"],
   [/\bviolin\b/i, "Violin"],
   [/\bcello\b/i, "Cello"],
   [/\borchestra\b|\bstrings\b/i, "Strings"],
   [/\bdrums?\b/i, "Drums"],
-  [/\bbass guitar\b/i, "Bass Guitar"],
+  [/\bbass guitar\b/i, "Bass"],
   [/\bbass\b/i, "Bass"],
   [/\bflute\b/i, "Flute"],
   [/\bsaxophone\b|\bsax\b/i, "Saxophone"],
@@ -27,10 +27,13 @@ const INSTRUMENT_PATTERNS: [RegExp, string][] = [
   [/\bbanjo\b/i, "Banjo"],
   [/\bukulele\b/i, "Ukulele"],
   [/\bharmonica\b/i, "Harmonica"],
-  [/\bcelesta\b/i, "Celesta"],
   [/\bxylophone\b|\bmarimba\b/i, "Marimba"],
-  [/\b808\b/i, "808 Bass"],
-  [/\bturntable\b|\bscratching\b/i, "Turntables"],
+  [/\b808\b/i, "808"],
+  [/\brho?des\b/i, "Rhodes"],
+  [/\bharp\b/i, "Harp"],
+  [/\borgan\b/i, "Organ"],
+  [/\bchoir\b|\bchorus\b/i, "Choir"],
+  [/\bbrass\b/i, "Brass"],
 ];
 
 const LANGUAGE_GENRE_HINTS: Record<string, string> = {
@@ -60,9 +63,9 @@ export function computeSuggestedDefaults(params: {
     const bpm = params.bpm;
 
     if (bpm > 140) {
-      result.energy = "high";
-    } else if (bpm >= 120) {
       result.energy = "intense";
+    } else if (bpm >= 120) {
+      result.energy = "high";
     } else if (bpm >= 90) {
       result.energy = "medium";
     } else if (bpm >= 60) {
