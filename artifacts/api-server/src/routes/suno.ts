@@ -2051,6 +2051,119 @@ function inferTempo(genres: string[]): string | null {
   return null;
 }
 
+// ─── Fallbacks: guarantee every /api/suggest field has a sensible value ──
+// These are intentionally generic so they never mislead, but always non-empty.
+const DEFAULT_MOODS = ["Cinematic", "Dreamy", "Nostalgic", "Intense"] as const;
+const DEFAULT_INSTRUMENTS = ["Synth", "Bass", "Drums", "Piano", "Guitar"] as const;
+const DEFAULT_GENRES = ["Pop", "Indie Pop", "Synth-Pop", "Dance Pop", "Electropop"] as const;
+
+const GENRE_TO_VOCALS: Record<string, string> = {
+  "Trap": "male", "Drill": "male", "Boom Bap": "male", "Gangsta Rap": "male",
+  "Phonk": "male", "Hip-Hop": "male", "Rap": "male", "Cloud Rap": "male", "G-Funk": "male",
+  "Grime": "male", "Metal": "male", "Heavy Metal": "male", "Death Metal": "male",
+  "Thrash Metal": "male", "Black Metal": "male", "Hard Rock": "male", "Punk": "male",
+  "Soul": "mixed", "R&B": "mixed", "Neo-Soul": "mixed", "Gospel": "mixed",
+  "Pop": "female", "Dance Pop": "female", "Synth-Pop": "female", "Electropop": "female",
+  "Indie Pop": "female", "K-Pop": "female", "J-Pop": "female", "Dream Pop": "female",
+  "Ambient": "no vocals", "Dark Ambient": "no vocals", "IDM": "no vocals",
+  "Drone Ambient": "no vocals", "Cinematic": "no vocals", "Film Score": "no vocals",
+  "Orchestral": "no vocals", "Classical": "no vocals", "Minimalist": "no vocals",
+  "House": "mixed", "Deep House": "mixed", "Tech House": "no vocals",
+  "Techno": "no vocals", "Berlin Techno": "no vocals", "Minimal Techno": "no vocals",
+  "Trance": "mixed", "Drum & Bass": "mixed", "Dubstep": "no vocals",
+};
+function inferVocals(genres: string[]): string {
+  for (const g of genres) { if (GENRE_TO_VOCALS[g]) return GENRE_TO_VOCALS[g]; }
+  return "mixed";
+}
+
+const GENRE_TO_INSTRUMENTS: Record<string, string[]> = {
+  "Hip-Hop": ["808", "Sub Bass", "Synth", "Drums", "Pad"],
+  "Trap": ["808", "Sub Bass", "Synth", "Drums", "Pad"],
+  "Drill": ["808", "Sub Bass", "Synth", "Drums", "Pad"],
+  "Phonk": ["808", "Synth", "Bass", "Drums", "Pad"],
+  "Boom Bap": ["Piano", "Bass", "Drums", "Brass", "Saxophone"],
+  "Rock": ["Electric Guitar", "Bass", "Drums", "Piano", "Synth"],
+  "Indie Rock": ["Electric Guitar", "Bass", "Drums", "Synth", "Piano"],
+  "Classic Rock": ["Electric Guitar", "Bass", "Drums", "Organ", "Piano"],
+  "Hard Rock": ["Electric Guitar", "Bass", "Drums", "Synth", "Piano"],
+  "Metal": ["Electric Guitar", "Bass", "Drums", "Synth", "Strings"],
+  "Punk": ["Electric Guitar", "Bass", "Drums", "Synth", "Piano"],
+  "Pop": ["Synth", "Bass", "Drums", "Piano", "Guitar"],
+  "Dance Pop": ["Synth", "Bass", "Drums", "Piano", "Pad"],
+  "Synth-Pop": ["Synth", "Bass", "Drums", "Pad", "Piano"],
+  "Electropop": ["Synth", "Sub Bass", "Drums", "Pad", "Piano"],
+  "House": ["Synth", "Sub Bass", "Drums", "Pad", "Piano"],
+  "Deep House": ["Rhodes", "Sub Bass", "Drums", "Pad", "Synth"],
+  "Tech House": ["Synth", "Sub Bass", "Drums", "Pad", "Piano"],
+  "Techno": ["Synth", "Sub Bass", "Drums", "Pad", "Moog"],
+  "Trance": ["Synth", "Pad", "Drums", "Sub Bass", "Strings"],
+  "Drum & Bass": ["Sub Bass", "Drums", "Synth", "Pad", "Piano"],
+  "Dubstep": ["Sub Bass", "Synth", "Drums", "Pad", "808"],
+  "Synthwave": ["Synth", "Drums", "Bass", "Pad", "Piano"],
+  "Country": ["Acoustic Guitar", "Bass", "Drums", "Pedal Steel", "Banjo"],
+  "Folk": ["Acoustic Guitar", "Bass", "Violin", "Piano", "Harmonica"],
+  "Jazz": ["Piano", "Bass", "Drums", "Saxophone", "Trumpet"],
+  "R&B": ["Rhodes", "Bass", "Drums", "Piano", "Synth"],
+  "Soul": ["Rhodes", "Bass", "Drums", "Brass", "Piano"],
+  "Reggae": ["Bass", "Drums", "Guitar", "Organ", "Piano"],
+  "Classical": ["Piano", "Violin", "Cello", "Strings", "Flute"],
+  "Cinematic": ["Strings", "Piano", "Brass", "Drums", "Synth"],
+  "Ambient": ["Pad", "Synth", "Piano", "Strings", "Drone"],
+};
+function inferInstruments(genres: string[]): string[] {
+  for (const g of genres) {
+    const list = GENRE_TO_INSTRUMENTS[g];
+    if (list && list.length >= 5) return list.slice(0, 5);
+  }
+  return [...DEFAULT_INSTRUMENTS];
+}
+
+const GENRE_TO_MOODS: Record<string, string[]> = {
+  "Trap": ["Dark", "Aggressive", "Gritty", "Intense"],
+  "Drill": ["Dark", "Aggressive", "Gritty", "Intense"],
+  "Phonk": ["Dark", "Eerie", "Aggressive", "Murky"],
+  "Hip-Hop": ["Gritty", "Defiant", "Raw", "Intense"],
+  "Pop": ["Euphoric", "Hopeful", "Playful", "Romantic"],
+  "Dance Pop": ["Euphoric", "Playful", "Groovy", "Hopeful"],
+  "Synth-Pop": ["Nostalgic", "Dreamy", "Euphoric", "Wistful"],
+  "Indie Pop": ["Dreamy", "Wistful", "Nostalgic", "Tender"],
+  "Electropop": ["Euphoric", "Playful", "Groovy", "Punchy"],
+  "Rock": ["Defiant", "Triumphant", "Raw", "Intense"],
+  "Hard Rock": ["Aggressive", "Defiant", "Raw", "Intense"],
+  "Punk": ["Aggressive", "Defiant", "Rebellious", "Raw"],
+  "Metal": ["Aggressive", "Dark", "Intense", "Brooding"],
+  "House": ["Euphoric", "Groovy", "Hypnotic", "Blissful"],
+  "Deep House": ["Soulful", "Groovy", "Hypnotic", "Laid-back"],
+  "Techno": ["Hypnotic", "Dark", "Intense", "Brooding"],
+  "Trance": ["Euphoric", "Cinematic", "Hypnotic", "Transcendent"],
+  "Drum & Bass": ["Intense", "Frantic", "Punchy", "Euphoric"],
+  "Dubstep": ["Aggressive", "Punchy", "Intense", "Chaotic"],
+  "Synthwave": ["Nostalgic", "Cinematic", "Dreamy", "Wistful"],
+  "Ambient": ["Serene", "Ethereal", "Dreamy", "Transcendent"],
+  "Cinematic": ["Cinematic", "Epic", "Majestic", "Triumphant"],
+  "Folk": ["Nostalgic", "Tender", "Wistful", "Intimate"],
+  "Country": ["Wistful", "Nostalgic", "Tender", "Hopeful"],
+  "Jazz": ["Groovy", "Soulful", "Intimate", "Laid-back"],
+  "R&B": ["Sensual", "Soulful", "Romantic", "Tender"],
+  "Soul": ["Soulful", "Cathartic", "Tender", "Triumphant"],
+  "Classical": ["Majestic", "Serene", "Cinematic", "Wistful"],
+};
+function inferMoods(genres: string[], validSet: Set<string>): string[] {
+  for (const g of genres) {
+    const list = GENRE_TO_MOODS[g]?.filter((m) => validSet.has(m));
+    if (list && list.length >= 4) return list.slice(0, 4);
+  }
+  return [...DEFAULT_MOODS];
+}
+
+function inferNudge(genres: string[], energy: string, tempo: string): string {
+  const lead = genres[0] ?? "pop";
+  const tone = energy === "intense" || energy === "high" ? "punchy" : energy === "very chill" || energy === "chill" ? "laid-back" : "polished";
+  const flavour = tempo === "ballad" || tempo === "slow" ? "atmospheric textures" : tempo === "hyper" || tempo === "fast" ? "driving rhythm section" : "groovy mid-tempo bounce";
+  return `${tone} ${lead.toLowerCase()} with ${flavour}`;
+}
+
 /**
  * GET /api/suggest?title=...&artist=...
  * Accepts the clean song title and artist directly (passed by the frontend after youtube-preview resolves).
@@ -2065,6 +2178,15 @@ router.get("/suggest", async (req, res) => {
     return;
   }
 
+  // Build enums here so both the JSON schema and validators stay in sync.
+  const ERA_ENUM = ["50s", "60s", "70s", "80s", "90s", "2000s", "2010s", "modern"] as const;
+  const ENERGY_ENUM = ["very chill", "chill", "medium", "high", "intense"] as const;
+  const TEMPO_ENUM = ["ballad", "slow", "mid", "groove", "uptempo", "fast", "hyper"] as const;
+  const VOCALS_ENUM = ["male", "female", "mixed", "duet", "no vocals"] as const;
+  const GENRE_LIST = ["Pop","Dance Pop","Indie Pop","Synth-Pop","Dream Pop","Art Pop","Electropop","Britpop","Rock","Alternative Rock","Indie Rock","Hard Rock","Classic Rock","Punk","Post-Punk","Grunge","Shoegaze","Psychedelic Rock","Progressive Rock","Garage Rock","Folk Rock","Arena Rock","New Wave","Emo","Post-Rock","Stoner Rock","Hip-Hop","Trap","Rap","Drill","Boom Bap","Gangsta Rap","G-Funk","Grime","Cloud Rap","Phonk","R&B","Soul","Neo-Soul","Funk","Disco","Motown","Gospel","Contemporary R&B","Jazz","Smooth Jazz","Bebop","Swing","Jazz Fusion","Big Band","Acid Jazz","Cool Jazz","Latin Jazz","Free Jazz","Metal","Heavy Metal","Black Metal","Death Metal","Thrash Metal","Nu Metal","Metalcore","Power Metal","Doom Metal","Symphonic Metal","Djent","Country","Americana","Bluegrass","Folk","Indie Folk","Outlaw Country","Country Rock","Country Pop","Alt-Country","Classical","Orchestral","Baroque","Cinematic","Film Score","Opera","Minimalist","Reggae","Dancehall","Reggaeton","Latin Pop","Bossa Nova","Flamenco","Salsa","K-Pop","J-Pop","Afrobeats","Blues","Delta Blues","Chicago Blues","Electric Blues","House","Deep House","Tech House","Progressive House","Acid House","Melodic House","Afro House","Soulful House","Chicago House","Nu Disco","Techno","Berlin Techno","Detroit Techno","Minimal Techno","Hard Techno","Dub Techno","Trance","Progressive Trance","Uplifting Trance","Psytrance","Goa Trance","Vocal Trance","Future Rave","Drum & Bass","Liquid DnB","Neurofunk","Darkstep","Jump Up","Jungle","Dubstep","Post-Dubstep","Brostep","Riddim","Future Bass","Breakbeat","Big Beat","Glitch Hop","Synthwave","Darksynth","Outrun","Retrowave","Chillwave","Hi-NRG","Italo Disco","Futurepop","Electro","EBM","Industrial","Darkwave","Cold Wave","EDM","Big Room","Electro House","Ambient","Dark Ambient","IDM","Glitch","Space Music","Drone Ambient","New Age","Trip-Hop","Downtempo","Chillhop","Lo-Fi","Vaporwave","Future Funk","Hardcore","Gabber","Hardstyle","UK Garage","2-Step","UK Bass","Memphis Phonk","Hyperpop","Amapiano","Gqom","Baile Funk","Footwork"] as const;
+  const MOOD_LIST = ["Dark","Euphoric","Nostalgic","Melancholic","Aggressive","Romantic","Dreamy","Rebellious","Playful","Mysterious","Cinematic","Hopeful","Angry","Tender","Haunted","Triumphant","Vulnerable","Defiant","Serene","Intense","Wistful","Bittersweet","Groovy","Frantic","Ethereal","Hypnotic","Brooding","Raw","Gritty","Majestic","Eerie","Sensual","Savage","Soulful","Cathartic","Blissful","Chaotic","Anxious","Desolate","Primal","Lush","Fierce","Longing","Psychedelic","Icy","Dusty","Tense","Laid-back","Transcendent","Unsettling","Festive","Murky","Euphoric-Sad","Punchy","Stormy","Intimate","Epic","Uneasy","Crystalline","Quirky"] as const;
+  const INSTRUMENT_LIST = ["Piano","Guitar","Synth","Strings","Bass","Choir","Brass","Drums","Violin","Flute","Organ","Sitar","Cello","Saxophone","Trumpet","Harp","Banjo","Ukulele","Mandolin","Marimba","Theremin","Mellotron","Pedal Steel","Dulcimer","808","Acoustic Guitar","Electric Guitar","Harmonica","Accordion","Vibraphone","Glockenspiel","Rhodes","Clarinet","Oboe","French Horn","Tabla","Congas","Sub Bass","Pad","Wurlitzer","Harpsichord","Bagpipes","Moog","Oud","Koto","Erhu","Steel Drums","Trombone","Bassoon","Bansuri","Lap Steel","Didgeridoo"] as const;
+
   try {
     // Run MusicBrainz and AI in parallel for speed
     const [mbData, aiSuggestion] = await Promise.all([
@@ -2074,25 +2196,51 @@ router.get("/suggest", async (req, res) => {
       ]),
       (async () => {
         try {
+          // Strict JSON-schema response — guarantees every required field is
+          // present and every enum value is valid. This is the only reliable
+          // way to stop the model from omitting fields or returning "auto".
+          const songStyleSchema = {
+            type: "object",
+            additionalProperties: false,
+            required: ["genres", "era", "energy", "tempo", "vocals", "moods", "instruments", "nudge"],
+            properties: {
+              genres: {
+                type: "array",
+                description: "Exactly 5 genres, most dominant first.",
+                items: { type: "string", enum: GENRE_LIST },
+              },
+              era: { type: "string", enum: ERA_ENUM },
+              energy: { type: "string", enum: ENERGY_ENUM },
+              tempo: { type: "string", enum: TEMPO_ENUM },
+              vocals: { type: "string", enum: VOCALS_ENUM },
+              moods: {
+                type: "array",
+                description: "Exactly 4 moods.",
+                items: { type: "string", enum: MOOD_LIST },
+              },
+              instruments: {
+                type: "array",
+                description: "Exactly 5 instruments.",
+                items: { type: "string", enum: INSTRUMENT_LIST },
+              },
+              nudge: {
+                type: "string",
+                description: "3-8 word creative style descriptor, non-empty.",
+              },
+            },
+          };
+
           const completion = await openai.chat.completions.create({
             model: AI_MINI_MODEL,
             max_completion_tokens: 700,
-            response_format: { type: "json_object" },
+            response_format: {
+              type: "json_schema",
+              json_schema: { name: "song_style", strict: true, schema: songStyleSchema },
+            },
             messages: [
               {
                 role: "system",
-                content: `You are a music expert. Given a song title and artist, return a JSON object filling EVERY field below. ALL fields are REQUIRED. Do not return empty arrays. Do not return "auto". Use your best informed judgment for every field — even if uncertain, commit to a specific choice based on the song name, artist style, and genre conventions.
-
-- "genres": EXACTLY 5 genre names from this list ONLY, ordered from most-to-least dominant: Pop, Dance Pop, Indie Pop, Synth-Pop, Dream Pop, Art Pop, Electropop, Britpop, Rock, Alternative Rock, Indie Rock, Hard Rock, Classic Rock, Punk, Post-Punk, Grunge, Shoegaze, Psychedelic Rock, Progressive Rock, Garage Rock, Folk Rock, Arena Rock, New Wave, Emo, Post-Rock, Stoner Rock, Hip-Hop, Trap, Rap, Drill, Boom Bap, Gangsta Rap, G-Funk, Grime, Cloud Rap, Phonk, R&B, Soul, Neo-Soul, Funk, Disco, Motown, Gospel, Contemporary R&B, Jazz, Smooth Jazz, Bebop, Swing, Jazz Fusion, Big Band, Acid Jazz, Cool Jazz, Latin Jazz, Free Jazz, Metal, Heavy Metal, Black Metal, Death Metal, Thrash Metal, Nu Metal, Metalcore, Power Metal, Doom Metal, Symphonic Metal, Djent, Country, Americana, Bluegrass, Folk, Indie Folk, Outlaw Country, Country Rock, Country Pop, Alt-Country, Classical, Orchestral, Baroque, Cinematic, Film Score, Opera, Minimalist, Reggae, Dancehall, Reggaeton, Latin Pop, Bossa Nova, Flamenco, Salsa, K-Pop, J-Pop, Afrobeats, Blues, Delta Blues, Chicago Blues, Electric Blues, House, Deep House, Tech House, Progressive House, Acid House, Melodic House, Afro House, Soulful House, Chicago House, Nu Disco, Techno, Berlin Techno, Detroit Techno, Minimal Techno, Hard Techno, Dub Techno, Trance, Progressive Trance, Uplifting Trance, Psytrance, Goa Trance, Vocal Trance, Future Rave, Drum & Bass, Liquid DnB, Neurofunk, Darkstep, Jump Up, Jungle, Dubstep, Post-Dubstep, Brostep, Riddim, Future Bass, Breakbeat, Big Beat, Glitch Hop, Synthwave, Darksynth, Outrun, Retrowave, Chillwave, Hi-NRG, Italo Disco, Futurepop, Electro, EBM, Industrial, Darkwave, Cold Wave, EDM, Big Room, Electro House, Ambient, Dark Ambient, IDM, Glitch, Space Music, Drone Ambient, New Age, Trip-Hop, Downtempo, Chillhop, Lo-Fi, Vaporwave, Future Funk, Hardcore, Gabber, Hardstyle, UK Garage, 2-Step, Grime, UK Bass, Phonk, Memphis Phonk, Hyperpop, Amapiano, Gqom, Baile Funk, Footwork
-- "era": REQUIRED. Exactly one of: 50s, 60s, 70s, 80s, 90s, 2000s, 2010s, modern. NEVER return "auto" or null.
-- "energy": REQUIRED. Exactly one of: very chill, chill, medium, high, intense.
-- "tempo": REQUIRED. Exactly one of: ballad, slow, mid, groove, uptempo, fast, hyper.
-- "vocals": REQUIRED. Exactly one of: male, female, mixed, duet, no vocals. NEVER return "auto". Pick "no vocals" only for confirmed instrumentals.
-- "moods": EXACTLY 4 from: Dark, Euphoric, Nostalgic, Melancholic, Aggressive, Romantic, Dreamy, Rebellious, Playful, Mysterious, Cinematic, Hopeful, Angry, Tender, Haunted, Triumphant, Vulnerable, Defiant, Serene, Intense, Wistful, Bittersweet, Groovy, Frantic, Ethereal, Hypnotic, Brooding, Raw, Gritty, Majestic, Eerie, Sensual, Savage, Soulful, Cathartic, Blissful, Chaotic, Anxious, Desolate, Primal, Lush, Fierce, Longing, Psychedelic, Icy, Dusty, Tense, Laid-back, Transcendent, Unsettling, Festive, Murky, Euphoric-Sad, Punchy, Stormy, Intimate, Epic, Uneasy, Crystalline, Quirky
-- "instruments": EXACTLY 5 from: Piano, Guitar, Synth, Strings, Bass, Choir, Brass, Drums, Violin, Flute, Organ, Sitar, Cello, Saxophone, Trumpet, Harp, Banjo, Ukulele, Mandolin, Marimba, Theremin, Mellotron, Pedal Steel, Dulcimer, 808, Acoustic Guitar, Electric Guitar, Harmonica, Accordion, Vibraphone, Glockenspiel, Rhodes, Clarinet, Oboe, French Horn, Tabla, Congas, Sub Bass, Pad, Wurlitzer, Harpsichord, Bagpipes, Moog, Oud, Koto, Erhu, Steel Drums, Trombone, Bassoon, Bansuri, Lap Steel, Didgeridoo
-- "nudge": REQUIRED. A 3–8 word creative style descriptor for this song (e.g. "punchy 808s with cinematic strings"). Must be non-empty.
-
-Counts are strict: genres MUST have 5 items, moods MUST have 4 items, instruments MUST have 5 items. Use exact spelling/casing from the lists.`,
+                content: `You are a music expert. For the given song, fill EVERY field in the JSON schema. The valid values are defined by the schema enums — you MUST pick from them. Counts are strict: genres exactly 5 (most-to-least dominant), moods exactly 4, instruments exactly 5. For "vocals", pick "no vocals" ONLY for confirmed instrumentals — otherwise commit to male/female/mixed/duet. For "nudge", write a 3-8 word creative style descriptor (e.g. "punchy 808s with cinematic strings"). Commit to specific choices based on the song title, artist style, and genre conventions — never hedge.`,
               },
               {
                 role: "user",
@@ -2114,36 +2262,71 @@ Counts are strict: genres MUST have 5 items, moods MUST have 4 items, instrument
     const mbTags = mbData.genres ?? [];
     const mbGenres = mapMbTagsToGenres(mbTags);
 
-    // Merge: AI provides genres/energy/tempo/vocals/moods/instruments/nudge, MusicBrainz provides era
-    const VALID_ERAS = new Set(["50s", "60s", "70s", "80s", "90s", "2000s", "2010s", "modern"]);
-    const VALID_ENERGIES = new Set(["very chill", "chill", "medium", "high", "intense"]);
-    const VALID_TEMPOS = new Set(["ballad", "slow", "mid", "groove", "uptempo", "fast", "hyper"]);
-    const VALID_VOCALS = new Set(["auto", "male", "female", "mixed", "duet", "no vocals"]);
-    const VALID_MOODS = new Set(["Dark","Euphoric","Nostalgic","Melancholic","Aggressive","Romantic","Dreamy","Rebellious","Playful","Mysterious","Cinematic","Hopeful","Angry","Tender","Haunted","Triumphant","Vulnerable","Defiant","Serene","Intense","Wistful","Bittersweet","Groovy","Frantic","Ethereal","Hypnotic","Brooding","Raw","Gritty","Majestic","Eerie","Sensual","Savage","Soulful","Cathartic","Blissful","Chaotic","Anxious","Desolate","Primal","Lush","Fierce","Longing","Psychedelic","Icy","Dusty","Tense","Laid-back","Transcendent","Unsettling","Festive","Murky","Euphoric-Sad","Punchy","Stormy","Intimate","Epic","Uneasy","Crystalline","Quirky"]);
-    const VALID_INSTRUMENTS = new Set(["Piano","Guitar","Synth","Strings","Bass","Choir","Brass","Drums","Violin","Flute","Organ","Sitar","Cello","Saxophone","Trumpet","Harp","Banjo","Ukulele","Mandolin","Marimba","Theremin","Mellotron","Pedal Steel","Dulcimer","808","Acoustic Guitar","Electric Guitar","Harmonica","Accordion","Vibraphone","Glockenspiel","Rhodes","Clarinet","Oboe","French Horn","Tabla","Congas","Sub Bass","Pad","Wurlitzer","Harpsichord","Bagpipes","Moog","Oud","Koto","Erhu","Steel Drums","Trombone","Bassoon","Bansuri","Lap Steel","Didgeridoo"]);
+    const VALID_ERAS = new Set<string>(ERA_ENUM);
+    const VALID_ENERGIES = new Set<string>(ENERGY_ENUM);
+    const VALID_TEMPOS = new Set<string>(TEMPO_ENUM);
+    const VALID_VOCALS = new Set<string>(VOCALS_ENUM);
+    const VALID_GENRES = new Set<string>(GENRE_LIST);
+    const VALID_MOODS = new Set<string>(MOOD_LIST);
+    const VALID_INSTRUMENTS = new Set<string>(INSTRUMENT_LIST);
 
-    const mbEra = yearToEra(mbData.releaseYear);
-    const VALID_GENRES = new Set(["Pop","Dance Pop","Indie Pop","Synth-Pop","Dream Pop","Art Pop","Electropop","Britpop","Rock","Alternative Rock","Indie Rock","Hard Rock","Classic Rock","Punk","Post-Punk","Grunge","Shoegaze","Psychedelic Rock","Progressive Rock","Garage Rock","Folk Rock","Arena Rock","New Wave","Emo","Post-Rock","Stoner Rock","Hip-Hop","Trap","Rap","Drill","Boom Bap","Gangsta Rap","G-Funk","Grime","Cloud Rap","Phonk","R&B","Soul","Neo-Soul","Funk","Disco","Motown","Gospel","Contemporary R&B","Jazz","Smooth Jazz","Bebop","Swing","Jazz Fusion","Big Band","Acid Jazz","Cool Jazz","Latin Jazz","Free Jazz","Metal","Heavy Metal","Black Metal","Death Metal","Thrash Metal","Nu Metal","Metalcore","Power Metal","Doom Metal","Symphonic Metal","Djent","Country","Americana","Bluegrass","Folk","Indie Folk","Outlaw Country","Country Rock","Country Pop","Alt-Country","Classical","Orchestral","Baroque","Cinematic","Film Score","Opera","Minimalist","Reggae","Dancehall","Reggaeton","Latin Pop","Bossa Nova","Flamenco","Salsa","K-Pop","J-Pop","Afrobeats","Blues","Delta Blues","Chicago Blues","Electric Blues","House","Deep House","Tech House","Progressive House","Acid House","Melodic House","Afro House","Soulful House","Chicago House","Nu Disco","Techno","Berlin Techno","Detroit Techno","Minimal Techno","Hard Techno","Dub Techno","Trance","Progressive Trance","Uplifting Trance","Psytrance","Goa Trance","Vocal Trance","Future Rave","Drum & Bass","Liquid DnB","Neurofunk","Darkstep","Jump Up","Jungle","Dubstep","Post-Dubstep","Brostep","Riddim","Future Bass","Breakbeat","Big Beat","Glitch Hop","Synthwave","Darksynth","Outrun","Retrowave","Chillwave","Hi-NRG","Italo Disco","Futurepop","Electro","EBM","Industrial","Darkwave","Cold Wave","EDM","Big Room","Electro House","Ambient","Dark Ambient","IDM","Glitch","Space Music","Drone Ambient","New Age","Trip-Hop","Downtempo","Chillhop","Lo-Fi","Vaporwave","Future Funk","Hardcore","Gabber","Hardstyle","UK Garage","2-Step","UK Bass","Memphis Phonk","Hyperpop","Amapiano","Gqom","Baile Funk","Footwork"]);
-    const aiGenres = (aiSuggestion.genres ?? []).filter((g): g is string => typeof g === "string" && VALID_GENRES.has(g)).slice(0, 5);
-    // Merge AI genres with MusicBrainz-derived genres, pad to 5
-    const seen = new Set(aiGenres);
-    for (const mg of mbGenres) {
-      if (aiGenres.length >= 5) break;
-      if (VALID_GENRES.has(mg) && !seen.has(mg)) { aiGenres.push(mg); seen.add(mg); }
+    // ── GENRES: AI → MB fallback → defaults; pad to exactly 5 ──
+    const aiGenres = (aiSuggestion.genres ?? [])
+      .filter((g): g is string => typeof g === "string" && VALID_GENRES.has(g));
+    const dedupGenres: string[] = [];
+    const seenG = new Set<string>();
+    for (const g of [...aiGenres, ...mbGenres, ...DEFAULT_GENRES]) {
+      if (!seenG.has(g) && VALID_GENRES.has(g)) { dedupGenres.push(g); seenG.add(g); }
+      if (dedupGenres.length >= 5) break;
     }
-    const genres = aiGenres.length > 0 ? aiGenres : mbGenres;
+    const genres = dedupGenres;
+
+    // ── ERA: MB year wins (most authoritative) → AI → fallback "modern" ──
+    const mbEra = yearToEra(mbData.releaseYear);
     const aiEra = typeof aiSuggestion.era === "string" && VALID_ERAS.has(aiSuggestion.era) ? aiSuggestion.era : null;
-    const era = mbEra ?? aiEra;
+    const era = mbEra ?? aiEra ?? "modern";
+
+    // ── ENERGY / TEMPO: AI → inferred from genres → safe default ──
     const aiEnergy = typeof aiSuggestion.energy === "string" && VALID_ENERGIES.has(aiSuggestion.energy) ? aiSuggestion.energy : null;
     const aiTempo = typeof aiSuggestion.tempo === "string" && VALID_TEMPOS.has(aiSuggestion.tempo) ? aiSuggestion.tempo : null;
-    const energy = aiEnergy ?? inferEnergy(genres);
-    const tempo = aiTempo ?? inferTempo(genres);
-    const vocals = typeof aiSuggestion.vocals === "string" && VALID_VOCALS.has(aiSuggestion.vocals) && aiSuggestion.vocals !== "auto" ? aiSuggestion.vocals : null;
-    const moods = (aiSuggestion.moods ?? []).filter((m): m is string => typeof m === "string" && VALID_MOODS.has(m)).slice(0, 4);
-    const instruments = (aiSuggestion.instruments ?? []).filter((i): i is string => typeof i === "string" && VALID_INSTRUMENTS.has(i)).slice(0, 5);
-    const nudge = typeof aiSuggestion.nudge === "string" && aiSuggestion.nudge.trim().length > 0 ? aiSuggestion.nudge.trim() : null;
+    const energy = aiEnergy ?? inferEnergy(genres) ?? "medium";
+    const tempo = aiTempo ?? inferTempo(genres) ?? "mid";
 
-    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] nudge:"${nudge}"`);
+    // ── VOCALS: AI (excluding "auto") → inferred from genres → "mixed" ──
+    const aiVocals = typeof aiSuggestion.vocals === "string" && VALID_VOCALS.has(aiSuggestion.vocals) && aiSuggestion.vocals !== "auto"
+      ? aiSuggestion.vocals
+      : null;
+    const vocals = aiVocals ?? inferVocals(genres);
+
+    // ── MOODS: AI valid items → genre-inferred fill → defaults; exactly 4 ──
+    const aiMoods = (aiSuggestion.moods ?? [])
+      .filter((m): m is string => typeof m === "string" && VALID_MOODS.has(m));
+    const moodFill = inferMoods(genres, VALID_MOODS);
+    const seenM = new Set<string>();
+    const moods: string[] = [];
+    for (const m of [...aiMoods, ...moodFill, ...DEFAULT_MOODS]) {
+      if (!seenM.has(m) && VALID_MOODS.has(m)) { moods.push(m); seenM.add(m); }
+      if (moods.length >= 4) break;
+    }
+
+    // ── INSTRUMENTS: AI valid items → genre-inferred fill → defaults; exactly 5 ──
+    const aiInstruments = (aiSuggestion.instruments ?? [])
+      .filter((i): i is string => typeof i === "string" && VALID_INSTRUMENTS.has(i));
+    const instFill = inferInstruments(genres);
+    const seenI = new Set<string>();
+    const instruments: string[] = [];
+    for (const i of [...aiInstruments, ...instFill, ...DEFAULT_INSTRUMENTS]) {
+      if (!seenI.has(i) && VALID_INSTRUMENTS.has(i)) { instruments.push(i); seenI.add(i); }
+      if (instruments.length >= 5) break;
+    }
+
+    // ── NUDGE: AI trimmed → inferred ──
+    const aiNudge = typeof aiSuggestion.nudge === "string" && aiSuggestion.nudge.trim().length > 0
+      ? aiSuggestion.nudge.trim()
+      : null;
+    const nudge = aiNudge ?? inferNudge(genres, energy, tempo);
+
+    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] nudge:"${nudge}" (aiOk=${Object.keys(aiSuggestion).length > 0})`);
 
     res.json({ genres, era, energy, tempo, vocals, moods, instruments, nudge, songTitle: title, artist, mbTags });
   } catch (err) {

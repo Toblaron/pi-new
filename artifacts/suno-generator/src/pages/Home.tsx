@@ -626,7 +626,7 @@ export default function Home() {
     else if (field === "era") setEra(val as typeof era);
     else if (field === "tempo") setTempo(val as "ballad" | "slow" | "mid" | "groove" | "uptempo" | "fast" | "hyper" | null);
     else if (field === "vocals") setVocalGender(val as typeof vocalGender);
-    else if (field === "genres") setSelectedGenres([val]);
+    else if (field === "genres") setSelectedGenres(val.split(",").filter(Boolean).slice(0, MAX_GENRES));
     else if (field === "instruments") setSelectedInstruments(val.split(",").filter(Boolean));
     else if (field === "moods") setSelectedMoods(val.split(",").filter(Boolean));
     else if (field === "nudge") setGenreNudge(val);
@@ -814,7 +814,14 @@ export default function Home() {
       setSuggestions(data);
       const autoFilled = new Set<string>();
       const savedValues: Record<string, string> = {};
-      if (data.genres.length > 0) { setSelectedGenres(data.genres); autoFilled.add("genres"); }
+      // /api/suggest is contract-guaranteed to return every field non-empty, so
+      // apply each one and mark it auto-filled. Falsy-guards would silently leave
+      // the form on its default and *was* the previous autofill bug.
+      if (data.genres.length > 0) {
+        setSelectedGenres(data.genres.slice(0, MAX_GENRES));
+        autoFilled.add("genres");
+        savedValues["genres"] = data.genres.join(",");
+      }
       if (data.era) { setEra(data.era as typeof era); autoFilled.add("era"); savedValues["era"] = data.era; }
       if (data.energy) { setEnergyLevel(data.energy as typeof energyLevel); autoFilled.add("energy"); savedValues["energy"] = data.energy; }
       if (data.tempo) { setTempo(data.tempo as typeof tempo); autoFilled.add("tempo"); savedValues["tempo"] = data.tempo; }
