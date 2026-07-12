@@ -71,7 +71,7 @@ Wants=network-online.target
 Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${APP_DIR}
-ExecStart=/usr/bin/node --env-file=${APP_DIR}/.env ${APP_DIR}/artifacts/api-server/dist/index.cjs
+ExecStart=$(which node) --env-file=${APP_DIR}/.env ${APP_DIR}/artifacts/api-server/dist/index.cjs
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

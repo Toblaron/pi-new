@@ -7,11 +7,17 @@ import { cacheStats, db } from "../lib/cache.js";
 import { getUsageStats } from "../lib/costTracker.js";
 import { claimNextJob } from "../lib/jobQueue.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+let resolvedFilename: string;
+try {
+  resolvedFilename = fileURLToPath(import.meta.url);
+} catch {
+  // @ts-ignore
+  resolvedFilename = typeof __filename !== "undefined" ? __filename : "";
+}
+const resolvedDirname = dirname(resolvedFilename);
 
 // Load tag dictionary at startup (fail fast if missing)
-const tagDictionaryPath = join(__dirname, "../data/sunoTagDictionary.json");
+const tagDictionaryPath = join(resolvedDirname, "../data/sunoTagDictionary.json");
 const tagDictionary = JSON.parse(readFileSync(tagDictionaryPath, "utf-8")) as {
   version: string;
   tags: Array<{ tag: string; grade: string; category: string; notes?: string }>;

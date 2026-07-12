@@ -1327,7 +1327,8 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
 
     const callArgs = {
       model: AI_MODEL,
-      max_completion_tokens: 8192,  // style(999) + lyrics(4999) + neg(199) + JSON overhead ≈ 2500 tokens; 8192 is Gemini Flash ceiling
+      max_tokens: 8192,  // style(999) + lyrics(4999) + neg(199) + JSON overhead ≈ 2500 tokens; 8192 is Gemini Flash ceiling
+      response_format: { type: "json_object" as const },
       messages: [
         { role: "system" as const, content: SYSTEM_PROMPT },
         { role: "user" as const, content: singleCallPrompt },
@@ -1388,7 +1389,10 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
         negativePrompt = parsed.negativePrompt ?? parsed.negative        ?? "";
         lyrics         = parsed.lyrics                                   ?? "";
         console.log(`[ai:json] style=${styleOfMusic.length} lyrics=${lyrics.length} neg=${negativePrompt.length}`);
-      } catch {
+      } catch (jsonErr) {
+        console.warn("[ai] JSON.parse failed:", (jsonErr as Error).message, "Raw length:", raw.length);
+        console.warn("[ai] Raw start:", raw.slice(0, 200));
+        console.warn("[ai] Raw end:", raw.slice(-200));
         // Third fallback: regex-extract individual fields from possibly-truncated JSON
         const extractJsonField = (text: string, field: string): string => {
           // Match "field": "value" — value may contain escaped quotes, stop at unescaped closing quote
@@ -1407,7 +1411,7 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
           lyrics         = rxLyrics;
           console.log(`[ai:regex] style=${styleOfMusic.length} lyrics=${lyrics.length} neg=${negativePrompt.length}`);
         } else {
-          console.warn("[ai] all parsers failed — raw snippet:", raw.slice(0, 300));
+          console.warn("[ai] all parsers failed — regex matches:", { style: !!rxStyle, lyrics: !!rxLyrics, neg: !!rxNeg, title: !!rxTitle });
           throw new Error("AI response format was unexpected. Please try again.");
         }
       }
@@ -2206,8 +2210,8 @@ router.get("/suggest", async (req, res) => {
             properties: {
               genres: {
                 type: "array",
-                description: "Exactly 5 genres, most dominant first.",
-                items: { type: "string", enum: GENRE_LIST },
+                description: `Exactly 5 genres, most dominant first. You MUST choose ONLY from this list: ${GENRE_LIST.join(", ")}`,
+                items: { type: "string" },
               },
               era: { type: "string", enum: ERA_ENUM },
               energy: { type: "string", enum: ENERGY_ENUM },
@@ -2215,13 +2219,13 @@ router.get("/suggest", async (req, res) => {
               vocals: { type: "string", enum: VOCALS_ENUM },
               moods: {
                 type: "array",
-                description: "Exactly 4 moods.",
-                items: { type: "string", enum: MOOD_LIST },
+                description: `Exactly 4 moods. You MUST choose ONLY from this list: ${MOOD_LIST.join(", ")}`,
+                items: { type: "string" },
               },
               instruments: {
                 type: "array",
-                description: "Exactly 5 instruments.",
-                items: { type: "string", enum: INSTRUMENT_LIST },
+                description: `Exactly 5 instruments. You MUST choose ONLY from this list: ${INSTRUMENT_LIST.join(", ")}`,
+                items: { type: "string" },
               },
               nudge: {
                 type: "string",
@@ -2232,7 +2236,7 @@ router.get("/suggest", async (req, res) => {
 
           const completion = await openai.chat.completions.create({
             model: AI_MINI_MODEL,
-            max_completion_tokens: 700,
+            max_tokens: 700,
             response_format: {
               type: "json_schema",
               json_schema: { name: "song_style", strict: true, schema: songStyleSchema },
@@ -2253,7 +2257,8 @@ router.get("/suggest", async (req, res) => {
           }
           const raw = completion.choices[0]?.message?.content ?? "{}";
           return JSON.parse(raw) as { genres?: string[]; era?: string; energy?: string; tempo?: string; vocals?: string; moods?: string[]; instruments?: string[]; nudge?: string };
-        } catch {
+        } catch (aiErr) {
+          console.error("[suggest] AI suggestion failed with error:", aiErr);
           return {};
         }
       })(),
@@ -2579,7 +2584,7 @@ Apply the transformation and return the updated styleOfMusic and negativePrompt 
   try {
     const completion = await openai.chat.completions.create({
       model: AI_MINI_MODEL,
-      max_completion_tokens: 600,
+      max_tokens: 600,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
@@ -2806,7 +2811,7 @@ router.post("/reverse", async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: AI_MINI_MODEL,
-      max_completion_tokens: 400,
+      max_tokens: 400,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -2858,7 +2863,7 @@ router.post("/mood-to-settings", async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: AI_MINI_MODEL,
-      max_completion_tokens: 300,
+      max_tokens: 300,
       response_format: { type: "json_object" },
       messages: [
         {
