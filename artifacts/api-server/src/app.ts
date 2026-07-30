@@ -48,7 +48,10 @@ const heavyLimiter = makeRateLimiter(20, 2 * 60 * 1000);
 // All other API endpoints: 120 requests / minute per IP
 const lightLimiter = makeRateLimiter(120, 60 * 1000);
 
-app.use(cors());
+// CORS_ORIGIN: comma-separated allowlist (e.g. "http://pi.local:3000,http://192.168.1.50:3000").
+// Unset = open CORS (default, safe for LAN-only deployments).
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(cors(corsOrigin ? { origin: corsOrigin.split(",").map((o) => o.trim()) } : undefined));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
