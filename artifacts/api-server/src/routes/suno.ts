@@ -705,6 +705,7 @@ function buildStyleControls(opts: {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
   tempo?: string;
   excludeTags?: string[];
   variationIndex?: number;
@@ -719,6 +720,9 @@ function buildStyleControls(opts: {
   }
   if (opts.instruments && opts.instruments.length > 0) {
     lines.push(`USER PREFERENCE — Featured instruments: ${opts.instruments.join(", ")}. Highlight these in Section 1 and include them in the production header of Section 2.`);
+  }
+  if (opts.voices && opts.voices.length > 0) {
+    lines.push(`USER PREFERENCE — Vocal type/technique/character: ${opts.voices.join(", ")}. Reflect these specifically in Section 1's "Vocal Identity" field (voice type, register, and delivery technique) and in the performance-direction cues throughout Section 2's lyrics.`);
   }
   if (opts.vocalGender && opts.vocalGender !== "auto") {
     const vocalMap: Record<string, string> = {
@@ -798,6 +802,7 @@ interface GenerateInput {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
   mode?: "cover" | "inspired";
   tempo?: "ballad" | "slow" | "mid" | "groove" | "uptempo" | "fast" | "hyper";
   excludeTags?: string[];
@@ -816,7 +821,7 @@ async function generateOneTemplate(
   data: GenerateInput,
   onStage?: (stage: GenerationStage) => void,
 ): Promise<ReturnType<typeof GenerateSunoTemplateResponse.parse>> {
-  const { youtubeUrl, manualLyrics, vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, mode, tempo, excludeTags, variationIndex, feedbackContext, isInstrumental, confirmedStructure, noCache } = data;
+  const { youtubeUrl, manualLyrics, vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, mode, tempo, excludeTags, variationIndex, feedbackContext, isInstrumental, confirmedStructure, noCache } = data;
 
   if (!isValidYouTubeUrl(youtubeUrl)) {
     throw new Error("Invalid YouTube URL. Please provide a valid youtube.com or youtu.be link.");
@@ -971,7 +976,7 @@ async function generateOneTemplate(
   // Template cache (keyed by videoId + params; feedbackContext excluded; user-override not cached; noCache bypasses)
   const useTemplateCache = videoId && metadata.lyricsSource !== "user-override" && !noCache;
   const templateCacheKey = useTemplateCache
-    ? `template:${videoId}:${hashParams({ vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, mode, tempo, excludeTags, variationIndex, isInstrumental, confirmedStructure })}`
+    ? `template:${videoId}:${hashParams({ vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, mode, tempo, excludeTags, variationIndex, isInstrumental, confirmedStructure })}`
     : null;
 
   let aiResult: AiOutput;
@@ -991,7 +996,7 @@ async function generateOneTemplate(
     // client) — the client-supplied feedbackContext field is accepted for API compatibility
     // but no longer trusted for biasing the prompt.
     const serverFeedbackContext = computeFeedbackContext();
-    const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext ?? feedbackContext });
+    const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext ?? feedbackContext });
 
     const singleCallPrompt = `You are SONIC ARCHITECT. Generate a complete SONIC ARCHITECT template for the song below. Output ONLY the delimiter blocks shown — no preamble, no commentary.
 
@@ -1618,6 +1623,7 @@ router.get("/suggest", async (req, res) => {
   const GENRE_LIST = ["Pop","Dance Pop","Indie Pop","Synth-Pop","Dream Pop","Art Pop","Electropop","Britpop","Rock","Alternative Rock","Indie Rock","Hard Rock","Classic Rock","Punk","Post-Punk","Grunge","Shoegaze","Psychedelic Rock","Progressive Rock","Garage Rock","Folk Rock","Arena Rock","New Wave","Emo","Post-Rock","Stoner Rock","Hip-Hop","Trap","Rap","Drill","Boom Bap","Gangsta Rap","G-Funk","Grime","Cloud Rap","Phonk","R&B","Soul","Neo-Soul","Funk","Disco","Motown","Gospel","Contemporary R&B","Jazz","Smooth Jazz","Bebop","Swing","Jazz Fusion","Big Band","Acid Jazz","Cool Jazz","Latin Jazz","Free Jazz","Metal","Heavy Metal","Black Metal","Death Metal","Thrash Metal","Nu Metal","Metalcore","Power Metal","Doom Metal","Symphonic Metal","Djent","Country","Americana","Bluegrass","Folk","Indie Folk","Outlaw Country","Country Rock","Country Pop","Alt-Country","Classical","Orchestral","Baroque","Cinematic","Film Score","Opera","Minimalist","Reggae","Dancehall","Reggaeton","Latin Pop","Bossa Nova","Flamenco","Salsa","K-Pop","J-Pop","Afrobeats","Blues","Delta Blues","Chicago Blues","Electric Blues","House","Deep House","Tech House","Progressive House","Acid House","Melodic House","Afro House","Soulful House","Chicago House","Nu Disco","Techno","Berlin Techno","Detroit Techno","Minimal Techno","Hard Techno","Dub Techno","Trance","Progressive Trance","Uplifting Trance","Psytrance","Goa Trance","Vocal Trance","Future Rave","Drum & Bass","Liquid DnB","Neurofunk","Darkstep","Jump Up","Jungle","Dubstep","Post-Dubstep","Brostep","Riddim","Future Bass","Breakbeat","Big Beat","Glitch Hop","Synthwave","Darksynth","Outrun","Retrowave","Chillwave","Hi-NRG","Italo Disco","Futurepop","Electro","EBM","Industrial","Darkwave","Cold Wave","EDM","Big Room","Electro House","Ambient","Dark Ambient","IDM","Glitch","Space Music","Drone Ambient","New Age","Trip-Hop","Downtempo","Chillhop","Lo-Fi","Vaporwave","Future Funk","Hardcore","Gabber","Hardstyle","UK Garage","2-Step","UK Bass","Memphis Phonk","Hyperpop","Amapiano","Gqom","Baile Funk","Footwork"] as const;
   const MOOD_LIST = ["Dark","Euphoric","Nostalgic","Melancholic","Aggressive","Romantic","Dreamy","Rebellious","Playful","Mysterious","Cinematic","Hopeful","Angry","Tender","Haunted","Triumphant","Vulnerable","Defiant","Serene","Intense","Wistful","Bittersweet","Groovy","Frantic","Ethereal","Hypnotic","Brooding","Raw","Gritty","Majestic","Eerie","Sensual","Savage","Soulful","Cathartic","Blissful","Chaotic","Anxious","Desolate","Primal","Lush","Fierce","Longing","Psychedelic","Icy","Dusty","Tense","Laid-back","Transcendent","Unsettling","Festive","Murky","Euphoric-Sad","Punchy","Stormy","Intimate","Epic","Uneasy","Crystalline","Quirky"] as const;
   const INSTRUMENT_LIST = ["Piano","Guitar","Synth","Strings","Bass","Choir","Brass","Drums","Violin","Flute","Organ","Sitar","Cello","Saxophone","Trumpet","Harp","Banjo","Ukulele","Mandolin","Marimba","Theremin","Mellotron","Pedal Steel","Dulcimer","808","Acoustic Guitar","Electric Guitar","Harmonica","Accordion","Vibraphone","Glockenspiel","Rhodes","Clarinet","Oboe","French Horn","Tabla","Congas","Sub Bass","Pad","Wurlitzer","Harpsichord","Bagpipes","Moog","Oud","Koto","Erhu","Steel Drums","Trombone","Bassoon","Bansuri","Lap Steel","Didgeridoo"] as const;
+  const VOICE_LIST = ["Male Voice","Female Voice","Soprano","Coloratura Soprano","Soubrette","Mezzo-Soprano","Coloratura Mezzo-Soprano","Cabaret Mezzo","Alto","Dramatic Alto","Alto Profondo","Tenor","Spinto Tenor","Counter-Tenor","Baritone","Verdi Baritone","Baryton-Martin","Bass","Lyric Bass","Basso Cantante","Gospel Choirs","Barbershop Quartets","Female Emotive Voice","Jamaican Slang","Robotic Vocals","Very Robotic Vocals","Female AI","Clear and Melodious Voice","Rapid-Fire Rap","Gentle Voice","Miku Voice","Vocaloid","Speak Fast","Male Singer","Children's Spoken Word","Circular Breathing","Ingressive Phonation","Microtonal Singing","Beatboxing","Throat Singing","Vocal Fry","Whistle Register","Shibuya-kei","Emotional Depth Vocal","Vocal Add-ons","Muffled Voice","Spanish Male Sensual Voice","Whispering Voice"] as const;
 
   try {
     // Run MusicBrainz and AI in parallel for speed
@@ -1634,7 +1640,7 @@ router.get("/suggest", async (req, res) => {
           const songStyleSchema = {
             type: "object",
             additionalProperties: false,
-            required: ["genres", "era", "energy", "tempo", "vocals", "moods", "instruments", "nudge"],
+            required: ["genres", "era", "energy", "tempo", "vocals", "moods", "instruments", "voices", "nudge"],
             properties: {
               genres: {
                 type: "array",
@@ -1655,6 +1661,11 @@ router.get("/suggest", async (req, res) => {
                 description: `Exactly 5 instruments. You MUST choose ONLY from this list: ${INSTRUMENT_LIST.join(", ")}`,
                 items: { type: "string" },
               },
+              voices: {
+                type: "array",
+                description: `Exactly 2 vocal type/technique/character tags that best fit this song's actual singer(s) — voice classification (e.g. Tenor, Mezzo-Soprano), delivery style (e.g. Rapid-Fire Rap, Whispering Voice), or vocal effect (e.g. Robotic Vocals) as appropriate. If the song is confirmed instrumental, still pick the 2 tags a hypothetical vocal version would suit best. You MUST choose ONLY from this list: ${VOICE_LIST.join(", ")}`,
+                items: { type: "string" },
+              },
               nudge: {
                 type: "string",
                 description: "3-8 word creative style descriptor, non-empty.",
@@ -1672,7 +1683,7 @@ router.get("/suggest", async (req, res) => {
             messages: [
               {
                 role: "system",
-                content: `You are a music expert. For the given song, fill EVERY field in the JSON schema. The valid values are defined by the schema enums — you MUST pick from them. Counts are strict: genres exactly 5 (most-to-least dominant), moods exactly 4, instruments exactly 5. For "vocals", pick "no vocals" ONLY for confirmed instrumentals — otherwise commit to male/female/mixed/duet. For "nudge", write a 3-8 word creative style descriptor (e.g. "punchy 808s with cinematic strings"). Commit to specific choices based on the song title, artist style, and genre conventions — never hedge.`,
+                content: `You are a music expert. For the given song, fill EVERY field in the JSON schema. The valid values are defined by the schema enums — you MUST pick from them. Counts are strict: genres exactly 5 (most-to-least dominant), moods exactly 4, instruments exactly 5, voices exactly 2. For "vocals", pick "no vocals" ONLY for confirmed instrumentals — otherwise commit to male/female/mixed/duet. For "voices", pick the 2 tags that most specifically describe the actual singer(s)' voice type or delivery style — never hedge with the two most generic options unless genuinely nothing more specific fits. For "nudge", write a 3-8 word creative style descriptor (e.g. "punchy 808s with cinematic strings"). Commit to specific choices based on the song title, artist style, and genre conventions — never hedge.`,
               },
               {
                 role: "user",
@@ -1684,7 +1695,7 @@ router.get("/suggest", async (req, res) => {
             trackUsage(AI_MINI_MODEL, completion.usage.prompt_tokens ?? 0, completion.usage.completion_tokens ?? 0, "suggest");
           }
           const raw = completion.choices[0]?.message?.content ?? "{}";
-          return JSON.parse(raw) as { genres?: string[]; era?: string; energy?: string; tempo?: string; vocals?: string; moods?: string[]; instruments?: string[]; nudge?: string };
+          return JSON.parse(raw) as { genres?: string[]; era?: string; energy?: string; tempo?: string; vocals?: string; moods?: string[]; instruments?: string[]; voices?: string[]; nudge?: string };
         } catch (aiErr) {
           console.error("[suggest] AI suggestion failed with error:", aiErr);
           return {};
@@ -1702,6 +1713,7 @@ router.get("/suggest", async (req, res) => {
     const VALID_GENRES = new Set<string>(GENRE_LIST);
     const VALID_MOODS = new Set<string>(MOOD_LIST);
     const VALID_INSTRUMENTS = new Set<string>(INSTRUMENT_LIST);
+    const VALID_VOICES = new Set<string>(VOICE_LIST);
 
     // ── GENRES: AI → MB fallback → defaults; pad to exactly 5 ──
     const aiGenres = (aiSuggestion.genres ?? [])
@@ -1753,15 +1765,32 @@ router.get("/suggest", async (req, res) => {
       if (instruments.length >= 5) break;
     }
 
+    // ── VOICES: AI valid items → fallback derived from the already-resolved vocal type ──
+    const aiVoices = (aiSuggestion.voices ?? [])
+      .filter((v): v is string => typeof v === "string" && VALID_VOICES.has(v));
+    const voiceFallback: Record<string, string[]> = {
+      male: ["Male Voice", "Male Singer"],
+      female: ["Female Voice", "Female Emotive Voice"],
+      mixed: ["Male Voice", "Female Voice"],
+      duet: ["Male Voice", "Female Voice"],
+      "no vocals": [],
+    };
+    const seenV = new Set<string>();
+    const voices: string[] = [];
+    for (const v of [...aiVoices, ...(voiceFallback[vocals] ?? [])]) {
+      if (!seenV.has(v) && VALID_VOICES.has(v)) { voices.push(v); seenV.add(v); }
+      if (voices.length >= 2) break;
+    }
+
     // ── NUDGE: AI trimmed → inferred ──
     const aiNudge = typeof aiSuggestion.nudge === "string" && aiSuggestion.nudge.trim().length > 0
       ? aiSuggestion.nudge.trim()
       : null;
     const nudge = aiNudge ?? inferNudge(genres, energy, tempo);
 
-    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] nudge:"${nudge}" (aiOk=${Object.keys(aiSuggestion).length > 0})`);
+    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] voices:[${voices.join(",")}] nudge:"${nudge}" (aiOk=${Object.keys(aiSuggestion).length > 0})`);
 
-    res.json({ genres, era, energy, tempo, vocals, moods, instruments, nudge, songTitle: title, artist, mbTags });
+    res.json({ genres, era, energy, tempo, vocals, moods, instruments, voices, nudge, songTitle: title, artist, mbTags });
   } catch (err) {
     console.error("suggest error:", err);
     res.status(500).json({ error: "Could not fetch suggestions" });
@@ -2059,7 +2088,7 @@ router.get("/cache/stats", (req, res) => {
  * Each is tuned to complement the others in key, BPM, and energy arc.
  */
 router.post("/multi-track", async (req, res) => {
-  const { youtubeUrl, vocalGender, energyLevel, era, mode, genres, moods, instruments } =
+  const { youtubeUrl, vocalGender, energyLevel, era, mode, genres, moods, instruments, voices } =
     req.body as {
       youtubeUrl?: string;
       vocalGender?: string;
@@ -2069,6 +2098,7 @@ router.post("/multi-track", async (req, res) => {
       genres?: string[];
       moods?: string[];
       instruments?: string[];
+      voices?: string[];
     };
 
   if (!youtubeUrl) {
@@ -2085,6 +2115,7 @@ router.post("/multi-track", async (req, res) => {
     genres,
     moods,
     instruments,
+    voices,
   };
 
   const TRACK_DEFS = [

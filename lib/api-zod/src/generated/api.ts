@@ -77,6 +77,12 @@ export const GenerateSunoTemplateBody = zod.object({
     .array(zod.string())
     .optional()
     .describe("Featured instrument hints (e.g. Piano, Guitar, Synth)"),
+  voices: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Vocal type\/technique\/character tags (e.g. Tenor, Robotic Vocals, Whispering Voice)",
+    ),
   mode: zod
     .enum(["cover", "inspired"])
     .optional()
@@ -301,6 +307,12 @@ export const GenerateVariationsBody = zod
       .array(zod.string())
       .optional()
       .describe("Featured instrument hints (e.g. Piano, Guitar, Synth)"),
+    voices: zod
+      .array(zod.string())
+      .optional()
+      .describe(
+        "Vocal type\/technique\/character tags (e.g. Tenor, Robotic Vocals, Whispering Voice)",
+      ),
     mode: zod
       .enum(["cover", "inspired"])
       .optional()
@@ -756,6 +768,7 @@ export const BatchGenerateBody = zod.object({
   genres: zod.array(zod.string()).optional(),
   moods: zod.array(zod.string()).optional(),
   instruments: zod.array(zod.string()).optional(),
+  voices: zod.array(zod.string()).optional(),
   excludeTags: zod.array(zod.string()).optional(),
   genreNudge: zod.string().optional(),
 });

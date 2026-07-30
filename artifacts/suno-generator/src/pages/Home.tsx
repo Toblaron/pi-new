@@ -73,6 +73,7 @@ const MAX_HISTORY = 10;
 const MAX_GENRES = 5;
 const MAX_MOODS = 4;
 const MAX_INSTRUMENTS = 5;
+const MAX_VOICES = 4;
 
 const MOOD_TAGS = [
   "Dark", "Euphoric", "Nostalgic", "Melancholic", "Aggressive", "Romantic",
@@ -99,6 +100,21 @@ const INSTRUMENT_TAGS = [
   "Korg MS-20", "Roland Juno-106", "Yamaha CS-80", "Roland SH-101",
   "Korg SB-100 Synthe Bass", "Korg MS2000", "Korg VC-10 Vocoder",
   "Access Virus TI", "Akai S1000 Sampler",
+];
+const VOICE_TAGS = [
+  "Male Voice", "Female Voice", "Soprano", "Coloratura Soprano", "Soubrette",
+  "Mezzo-Soprano", "Coloratura Mezzo-Soprano", "Cabaret Mezzo", "Alto",
+  "Dramatic Alto", "Alto Profondo", "Tenor", "Spinto Tenor", "Counter-Tenor",
+  "Baritone", "Verdi Baritone", "Baryton-Martin", "Bass", "Lyric Bass",
+  "Basso Cantante", "Gospel Choirs", "Barbershop Quartets",
+  "Female Emotive Voice", "Jamaican Slang", "Robotic Vocals",
+  "Very Robotic Vocals", "Female AI", "Clear and Melodious Voice",
+  "Rapid-Fire Rap", "Gentle Voice", "Miku Voice", "Vocaloid", "Speak Fast",
+  "Male Singer", "Children's Spoken Word", "Circular Breathing",
+  "Ingressive Phonation", "Microtonal Singing", "Beatboxing",
+  "Throat Singing", "Vocal Fry", "Whistle Register", "Shibuya-kei",
+  "Emotional Depth Vocal", "Vocal Add-ons", "Muffled Voice",
+  "Spanish Male Sensual Voice", "Whispering Voice",
 ];
 const QUALITY_EXCLUSIONS: { label: string; value: string }[] = [
   { label: "Muddy mix", value: "muddy mix" },
@@ -208,6 +224,7 @@ interface CreativePreset {
     tempo?: "ballad" | "slow" | "mid" | "groove" | "uptempo" | "fast" | "hyper" | null;
     selectedMoods?: string[];
     selectedInstruments?: string[];
+    selectedVoices?: string[];
     genreNudge?: string;
     excludeTags?: string[];
   };
@@ -267,6 +284,7 @@ interface ArtistStyle {
   tempo?: string;
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
 }
 
 function loadArtistStyles(): Record<string, ArtistStyle> {
@@ -301,6 +319,7 @@ interface UsedOptions {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
   vocalGender?: string;
   energyLevel?: string;
   era?: string;
@@ -333,6 +352,7 @@ interface SuggestedControls {
   vocals: string | null;
   moods: string[];
   instruments: string[];
+  voices: string[];
   nudge: string | null;
   songTitle: string;
   artist: string;
@@ -494,6 +514,7 @@ export default function Home() {
   const [expandedGenreCategory, setExpandedGenreCategory] = useState<string | null>(null);
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
+  const [selectedVoices, setSelectedVoices] = useState<string[]>([]);
   const [mode, setMode] = useState<"cover" | "inspired" | null>(null);
   const [tempo, setTempo] = useState<"ballad" | "slow" | "mid" | "groove" | "uptempo" | "fast" | "hyper" | null>(null);
   const [excludeTags, setExcludeTags] = useState<string[]>([]);
@@ -630,6 +651,7 @@ export default function Home() {
     else if (field === "vocals") setVocalGender(val as typeof vocalGender);
     else if (field === "genres") setSelectedGenres(val.split(",").filter(Boolean).slice(0, MAX_GENRES));
     else if (field === "instruments") setSelectedInstruments(val.split(",").filter(Boolean));
+    else if (field === "voices") setSelectedVoices(val.split(",").filter(Boolean));
     else if (field === "moods") setSelectedMoods(val.split(",").filter(Boolean));
     else if (field === "nudge") setGenreNudge(val);
     setAutoFilledFields((prev) => { const next = new Set(prev); next.add(field); return next; });
@@ -652,6 +674,7 @@ export default function Home() {
           selectedGenres?: string[];
           selectedMoods?: string[];
           selectedInstruments?: string[];
+          selectedVoices?: string[];
           vocalGender?: string;
           energyLevel?: string;
           era?: string;
@@ -664,6 +687,7 @@ export default function Home() {
         if (draft.selectedGenres) setSelectedGenres(draft.selectedGenres);
         if (draft.selectedMoods) setSelectedMoods(draft.selectedMoods);
         if (draft.selectedInstruments) setSelectedInstruments(draft.selectedInstruments);
+        if (draft.selectedVoices) setSelectedVoices(draft.selectedVoices);
         if (draft.vocalGender) setVocalGender(draft.vocalGender as typeof vocalGender);
         if (draft.energyLevel) setEnergyLevel(draft.energyLevel as typeof energyLevel);
         if (draft.era) setEra(draft.era as typeof era);
@@ -768,6 +792,7 @@ export default function Home() {
             if (saved.tempo) setTempo(saved.tempo as typeof tempo);
             if (saved.moods?.length) setSelectedMoods(saved.moods);
             if (saved.instruments?.length) setSelectedInstruments(saved.instruments);
+            if (saved.voices?.length) setSelectedVoices(saved.voices);
             setArtistMemoryBanner(artist);
             setShowStyleControls(true);
             setTimeout(() => setArtistMemoryBanner(null), 5000);
@@ -820,7 +845,7 @@ export default function Home() {
       // different song while this request was in flight.
       if (targetId !== lastVideoIdRef.current) return;
       const hasAny = data.genres.length > 0 || data.era || data.energy || data.tempo || data.vocals
-        || data.moods?.length > 0 || data.instruments?.length > 0 || data.nudge;
+        || data.moods?.length > 0 || data.instruments?.length > 0 || data.voices?.length > 0 || data.nudge;
       if (!hasAny) return;
       setSuggestions(data);
       const autoFilled = new Set<string>();
@@ -841,6 +866,8 @@ export default function Home() {
       if (validMoods.length > 0) { setSelectedMoods(validMoods); autoFilled.add("moods"); savedValues["moods"] = validMoods.join(","); }
       const validInstruments = (data.instruments ?? []).filter((i) => INSTRUMENT_TAGS.includes(i)).slice(0, MAX_INSTRUMENTS);
       if (validInstruments.length > 0) { setSelectedInstruments(validInstruments); autoFilled.add("instruments"); savedValues["instruments"] = validInstruments.join(","); }
+      const validVoices = (data.voices ?? []).filter((v) => VOICE_TAGS.includes(v)).slice(0, MAX_VOICES);
+      if (validVoices.length > 0) { setSelectedVoices(validVoices); autoFilled.add("voices"); savedValues["voices"] = validVoices.join(","); }
       if (data.nudge) { setGenreNudge(data.nudge); autoFilled.add("nudge"); savedValues["nudge"] = data.nudge; }
       setAutoFilledFields(autoFilled);
       setAutoFillValues(savedValues);
@@ -892,6 +919,7 @@ export default function Home() {
         selectedGenres,
         selectedMoods,
         selectedInstruments,
+        selectedVoices,
         vocalGender,
         energyLevel,
         era,
@@ -905,7 +933,7 @@ export default function Home() {
       if (draftSavedTimerRef.current) clearTimeout(draftSavedTimerRef.current);
       draftSavedTimerRef.current = setTimeout(() => setDraftSaved(false), 2000);
     } catch { /* ignore */ }
-  }, [urlValue, selectedGenres, selectedMoods, selectedInstruments, vocalGender, energyLevel, era, tempo, mode, genreNudge, excludeTags]);
+  }, [urlValue, selectedGenres, selectedMoods, selectedInstruments, selectedVoices, vocalGender, energyLevel, era, tempo, mode, genreNudge, excludeTags]);
 
   const addToHistory = (url: string, template: SunoTemplate, opts?: UsedOptions) => {
     const { overall: qualityScore } = scoreTemplate(template);
@@ -949,6 +977,7 @@ export default function Home() {
     genres: selectedGenres.length > 0 ? selectedGenres : undefined,
     moods: selectedMoods.length > 0 ? selectedMoods : undefined,
     instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+    voices: selectedVoices.length > 0 ? selectedVoices : undefined,
     vocalGender: vocalGender !== "auto" ? vocalGender : undefined,
     energyLevel: energyLevel !== "auto" ? energyLevel : undefined,
     era: era !== "auto" ? era : undefined,
@@ -1024,6 +1053,7 @@ export default function Home() {
       genres: selectedGenres.length > 0 ? selectedGenres : undefined,
       moods: selectedMoods.length > 0 ? selectedMoods : undefined,
       instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+      voices: selectedVoices.length > 0 ? selectedVoices : undefined,
       mode: mode ?? undefined,
       tempo: tempo ?? undefined,
       excludeTags: allExcludeTags.length > 0 ? allExcludeTags : undefined,
@@ -1042,6 +1072,7 @@ export default function Home() {
     setSelectedGenres(pickN(ALL_GENRES, Math.floor(Math.random() * 3) + 1));
     setSelectedMoods(pickN(MOOD_TAGS, Math.floor(Math.random() * 2) + 1));
     setSelectedInstruments(pickN(INSTRUMENT_TAGS, Math.floor(Math.random() * 3) + 1));
+    setSelectedVoices(pickN(VOICE_TAGS, Math.floor(Math.random() * 2) + 1));
     setVocalGender(pick(["auto", ...ALL_VOCALS]));
     setEnergyLevel(pick(["auto", ...ALL_ENERGIES]));
     setEra(pick(["auto", ...ALL_ERAS]));
@@ -1062,6 +1093,7 @@ export default function Home() {
     if (s.tempo !== undefined) setTempo(s.tempo ?? null);
     if (s.selectedMoods !== undefined) setSelectedMoods(s.selectedMoods);
     if (s.selectedInstruments !== undefined) setSelectedInstruments(s.selectedInstruments);
+    if (s.selectedVoices !== undefined) setSelectedVoices(s.selectedVoices);
     if (s.genreNudge !== undefined) setGenreNudge(s.genreNudge);
     if (s.excludeTags !== undefined) setExcludeTags(s.excludeTags);
     if (!showStyleControls) setShowStyleControls(true);
@@ -1176,6 +1208,7 @@ export default function Home() {
       genres: selectedGenres.length > 0 ? selectedGenres : undefined,
       moods: selectedMoods.length > 0 ? selectedMoods : undefined,
       instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+      voices: selectedVoices.length > 0 ? selectedVoices : undefined,
       vocalGender: vocalGender !== "auto" ? vocalGender : undefined,
       energyLevel: energyLevel !== "auto" ? energyLevel : undefined,
       era: era !== "auto" ? era : undefined,
@@ -1234,6 +1267,7 @@ export default function Home() {
           tempo: tempo ?? undefined,
           moods: selectedMoods.length > 0 ? selectedMoods : undefined,
           instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+          voices: selectedVoices.length > 0 ? selectedVoices : undefined,
         });
       }
       clearApiFailure();
@@ -1491,6 +1525,7 @@ export default function Home() {
           genres: selectedGenres.length > 0 ? selectedGenres : undefined,
           moods: selectedMoods.length > 0 ? selectedMoods : undefined,
           instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+          voices: selectedVoices.length > 0 ? selectedVoices : undefined,
           excludeTags: excludeTags.length > 0 ? excludeTags : undefined,
           genreNudge: genreNudge.trim() || undefined,
         }),
@@ -1561,6 +1596,7 @@ export default function Home() {
         genres: selectedGenres.length > 0 ? selectedGenres : undefined,
         moods: selectedMoods.length > 0 ? selectedMoods : undefined,
         instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+        voices: selectedVoices.length > 0 ? selectedVoices : undefined,
         excludeTags: excludeTags.length > 0 ? excludeTags : undefined,
         genreNudge: genreNudge.trim() || undefined,
       }),
@@ -1662,6 +1698,7 @@ export default function Home() {
     setExpandedGenreCategory(null);
     setSelectedMoods([]);
     setSelectedInstruments([]);
+    setSelectedVoices([]);
     setVocalGender("auto");
     setEnergyLevel("auto");
     setEra("auto");
@@ -1804,6 +1841,7 @@ export default function Home() {
     selectedGenres.length > 0,
     selectedMoods.length > 0,
     selectedInstruments.length > 0,
+    selectedVoices.length > 0,
     tempo !== null,
   ].filter(Boolean).length;
 
@@ -2529,6 +2567,39 @@ export default function Home() {
                             )}
                           >
                             {inst}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Voices */}
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                      <Mic2 className="w-3 h-3 text-secondary" /> Voices
+                      <span className="text-[10px] text-zinc-600 font-normal normal-case tracking-normal">(up to {MAX_VOICES})</span>
+                      {autoFilledFields.has("voices") && <AutoBadge />}
+                      {!autoFilledFields.has("voices") && autoFillValues["voices"] && (
+                        <ResetAutoFillButton value="restore" onClick={() => resetAutoFill("voices")} />
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {VOICE_TAGS.map((voice) => {
+                        const isSelected = selectedVoices.includes(voice);
+                        const isDisabled = !isSelected && selectedVoices.length >= MAX_VOICES;
+                        return (
+                          <button
+                            key={voice}
+                            type="button"
+                            onClick={() => { if (!isDisabled) { setSelectedVoices((p) => toggleSet(p, voice, MAX_VOICES)); clearAutoFill("voices"); } }}
+                            className={cn(
+                              "px-2.5 py-0.5 font-mono text-[11px] border transition-all",
+                              isSelected ? "border-primary text-primary bg-primary/10"
+                                : isDisabled ? "opacity-20 cursor-not-allowed border-primary/10 text-zinc-600"
+                                : "border-primary/15 text-zinc-500 hover:border-primary/40 hover:text-zinc-300"
+                            )}
+                          >
+                            {voice}
                           </button>
                         );
                       })}
@@ -3261,6 +3332,7 @@ export default function Home() {
                   genres={selectedGenres.length > 0 ? selectedGenres : undefined}
                   moods={selectedMoods.length > 0 ? selectedMoods : undefined}
                   instruments={selectedInstruments.length > 0 ? selectedInstruments : undefined}
+                  voices={selectedVoices.length > 0 ? selectedVoices : undefined}
                 />
               </div>
 

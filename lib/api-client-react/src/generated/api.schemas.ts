@@ -114,6 +114,8 @@ export interface GenerateTemplateRequest {
   moods?: string[];
   /** Featured instrument hints (e.g. Piano, Guitar, Synth) */
   instruments?: string[];
+  /** Vocal type/technique/character tags (e.g. Tenor, Robotic Vocals, Whispering Voice) */
+  voices?: string[];
   /** Generation mode — faithful cover or creative inspiration */
   mode?: GenerateTemplateRequestMode;
   /** Target BPM range */
@@ -340,6 +342,7 @@ export interface BatchGenerateRequest {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
   excludeTags?: string[];
   genreNudge?: string;
 }

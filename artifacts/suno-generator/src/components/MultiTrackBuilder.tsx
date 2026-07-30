@@ -211,6 +211,7 @@ interface MultiTrackBuilderProps {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
   className?: string;
 }
 
@@ -223,6 +224,7 @@ export function MultiTrackBuilder({
   genres,
   moods,
   instruments,
+  voices,
   className,
 }: MultiTrackBuilderProps) {
   const [expanded, setExpanded] = useState(false);
@@ -243,7 +245,7 @@ export function MultiTrackBuilder({
       const resp = await fetch(`${apiBase}/api/multi-track`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ youtubeUrl, vocalGender, energyLevel, era, mode, genres, moods, instruments }),
+        body: JSON.stringify({ youtubeUrl, vocalGender, energyLevel, era, mode, genres, moods, instruments, voices }),
       });
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({})) as { error?: string };

@@ -24,6 +24,7 @@ export interface BatchGenerateRequest {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
+  voices?: string[];
   excludeTags?: string[];
   genreNudge?: string;
 }
