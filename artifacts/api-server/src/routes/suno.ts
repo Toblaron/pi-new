@@ -17,6 +17,8 @@ import { fuseMetadata, type FusedMetadata } from "../lib/metadataFusion.js";
 import { retryFetch } from "../lib/retryFetch.js";
 import { trackUsage } from "../lib/costTracker.js";
 import { computeFeedbackContext } from "../lib/historyStore.js";
+import { identifyByFingerprint } from "../lib/acoustid.js";
+import { downloadAudioSample, cleanupAudioSample } from "../lib/audioDownload.js";
 
 const AI_MODEL      = process.env.AI_MODEL      ?? "gpt-4o";
 const AI_MINI_MODEL = process.env.AI_MINI_MODEL ?? "gpt-4.1-mini";
@@ -559,15 +561,45 @@ async function fetchBaseMetadata(url: string): Promise<BaseVideoMetadata> {
     console.warn("ytdl-core enrichment skipped:", (ytdlErr as Error).message?.slice(0, 80));
   }
 
-  const { cleanTitle, cleanArtist } = cleanSongTitle(title, author);
+  let { cleanTitle, cleanArtist } = cleanSongTitle(title, author);
   const duration = durationSeconds ? formatDuration(durationSeconds) : "";
   const descriptionData = parseDescriptionForMusicData(description);
 
   console.log(`Looking up: "${cleanArtist}" - "${cleanTitle}"${durationSeconds ? ` (${durationSeconds}s)` : ""}`);
 
-  const musicBrainz = await fetchMusicBrainzData(cleanArtist, cleanTitle, durationSeconds ?? undefined);
+  let musicBrainz = await fetchMusicBrainzData(cleanArtist, cleanTitle, durationSeconds ?? undefined);
   if (musicBrainz.releaseYear || musicBrainz.genres?.length) {
     console.log(`MusicBrainz: year=${musicBrainz.releaseYear}, genres=[${musicBrainz.genres?.join(", ")}], album="${musicBrainz.album}"`);
+  }
+
+  // AcoustID fallback: the title-based text search above found nothing, which usually means the
+  // video title didn't parse into a real "Artist - Song" (remixes, re-uploads, "Nightcore -"
+  // edits, non-standard titles). Fingerprint the actual audio and redo the lookup with a verified
+  // artist/title. Best-effort and silent — no-ops entirely if ACOUSTID_API_KEY/fpcalc aren't
+  // configured (see acoustid.ts), and never blocks generation on failure.
+  if (!musicBrainz.releaseYear && !musicBrainz.genres?.length && !musicBrainz.album && process.env.ACOUSTID_API_KEY) {
+    let audioPath: string | null = null;
+    try {
+      audioPath = await downloadAudioSample(url);
+      if (audioPath) {
+        const identified = await identifyByFingerprint(audioPath);
+        if (identified && identified.confidence >= 0.5 && identified.title) {
+          console.log(`[acoustid] identified "${identified.title}" by "${identified.artist ?? "?"}" (confidence=${identified.confidence.toFixed(2)}) — redoing lookups with verified metadata`);
+          cleanTitle = identified.title;
+          if (identified.artist) cleanArtist = identified.artist;
+          const verified = await fetchMusicBrainzData(cleanArtist, cleanTitle, durationSeconds ?? undefined);
+          if (verified.releaseYear || verified.genres?.length || verified.album) {
+            musicBrainz = verified;
+          } else if (identified.releaseYear) {
+            musicBrainz = { ...musicBrainz, releaseYear: identified.releaseYear };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[acoustid] fallback failed:", (err as Error).message?.slice(0, 120));
+    } finally {
+      if (audioPath) await cleanupAudioSample(audioPath);
+    }
   }
 
   // Enrich with Last.fm, Discogs, TheAudioDB, Deezer in parallel (Deezer is keyless; others gracefully skip if keys missing)
