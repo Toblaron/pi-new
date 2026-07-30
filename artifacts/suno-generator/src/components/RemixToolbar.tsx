@@ -92,7 +92,7 @@ export function RemixToolbar({ onTransform, activeTransformId, disabled, chainLe
                       className={cn(
                         "flex items-center gap-1 px-2.5 py-1 font-mono text-[11px] border transition-all",
                         meta.color,
-                        (disabled || !!activeTransformId || chainLength >= 10) && "opacity-40 cursor-not-allowed pointer-events-none",
+                        (disabled || !!activeTransformId || chainLength - 1 >= 10) && "opacity-40 cursor-not-allowed pointer-events-none",
                         isLoading && "opacity-100 border-primary/60 text-primary bg-primary/10"
                       )}
                     >

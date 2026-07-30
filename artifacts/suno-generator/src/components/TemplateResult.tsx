@@ -208,12 +208,21 @@ export function TemplateResult({
   const [editedNeg, setEditedNeg] = useState(template.negativePrompt ?? "");
   const [editedTitle, setEditedTitle] = useState(template.title ?? "");
 
+  // Split per-field (rather than one effect keyed on the whole `template` object) so that a
+  // partial section regeneration — which produces a new template object but only actually
+  // changes one field — doesn't silently discard the user's unsaved edits to the other fields.
   useEffect(() => {
     setEditedStyle(template.styleOfMusic ?? "");
+  }, [template.styleOfMusic]);
+  useEffect(() => {
     setEditedLyrics(template.lyrics ?? "");
+  }, [template.lyrics]);
+  useEffect(() => {
     setEditedNeg(template.negativePrompt ?? "");
+  }, [template.negativePrompt]);
+  useEffect(() => {
     setEditedTitle(template.title ?? "");
-  }, [template]);
+  }, [template.title]);
 
   const antiCliches = detectAntiCliches(editedStyle + " " + editedLyrics);
   const styleConflicts = detectConflicts(editedStyle);

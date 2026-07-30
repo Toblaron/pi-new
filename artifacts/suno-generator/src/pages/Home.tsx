@@ -748,8 +748,13 @@ export default function Home() {
       const resp = await fetch(`/api/youtube-preview?url=${encodeURIComponent(url)}`, {
         signal: AbortSignal.timeout(15000),
       });
+      // The user may have pasted a different URL while this request was in flight — applying
+      // a stale response would silently overwrite the genre/era/mood/instrument fields with
+      // the wrong song's data. Bail out rather than apply anything below this point.
+      if (id !== lastVideoIdRef.current) return;
       if (resp.ok) {
         const data = await resp.json() as VideoPreview & { cleanTitle?: string };
+        if (id !== lastVideoIdRef.current) return;
         setVideoPreview({ ...data, thumbnail: thumb });
         const artist = data.author ?? "";
         const title = data.cleanTitle ?? data.title ?? "";
@@ -767,7 +772,7 @@ export default function Home() {
             setShowStyleControls(true);
             setTimeout(() => setArtistMemoryBanner(null), 5000);
           }
-          fetchSuggestionsForSong(title, artist);
+          fetchSuggestionsForSong(title, artist, id);
           // Pre-generate structure analysis in background (non-blocking)
           const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
           const targetId = extractVideoId(url);
@@ -795,12 +800,13 @@ export default function Home() {
         setSuggestLoading(false);
       }
     } catch {
+      if (id !== lastVideoIdRef.current) return;
       setSuggestLoading(false);
     }
-    setPreviewLoading(false);
+    if (id === lastVideoIdRef.current) setPreviewLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchSuggestionsForSong = useCallback(async (title: string, artist: string) => {
+  const fetchSuggestionsForSong = useCallback(async (title: string, artist: string, targetId: string) => {
     setSuggestLoading(true);
     setShowStyleControls(true);
     try {
@@ -810,6 +816,9 @@ export default function Home() {
       });
       if (!resp.ok) return;
       const data = await resp.json() as SuggestedControls;
+      // Same staleness hazard as fetchVideoPreview — the user may have moved on to a
+      // different song while this request was in flight.
+      if (targetId !== lastVideoIdRef.current) return;
       const hasAny = data.genres.length > 0 || data.era || data.energy || data.tempo || data.vocals
         || data.moods?.length > 0 || data.instruments?.length > 0 || data.nudge;
       if (!hasAny) return;
@@ -1599,15 +1608,21 @@ export default function Home() {
 
   const handleRegenerateSection = (section: keyof SunoTemplate) => {
     if (!lastUrlRef.current) return;
+    const requestedUrl = lastUrlRef.current;
     setRegeneratingSection(section as string);
     setApiError(null);
     mainMutation.mutate(
-      { data: { youtubeUrl: lastUrlRef.current, ...(lastOptionsRef.current as object), noCache: true } },
+      { data: { youtubeUrl: requestedUrl, ...(lastOptionsRef.current as object), noCache: true } },
       {
         onSuccess: (newData: SunoTemplate) => {
-          setCurrentTemplate((prev: SunoTemplate | null) =>
-            prev ? { ...prev, [section]: newData[section as keyof SunoTemplate] } : newData
-          );
+          // If the user has since generated a different song, this response is stale for
+          // whatever's now displayed — applying it would splice the old song's section into
+          // the new song's template. Drop it instead of merging.
+          if (lastUrlRef.current === requestedUrl) {
+            setCurrentTemplate((prev: SunoTemplate | null) =>
+              prev ? { ...prev, [section]: newData[section as keyof SunoTemplate] } : newData
+            );
+          }
           setRegeneratingSection(null);
         },
         onError: (err: unknown) => {
@@ -1694,19 +1709,24 @@ export default function Home() {
 
   const handleRerollSection = (section: "style" | "lyrics") => {
     if (!lastUrlRef.current) return;
+    const requestedUrl = lastUrlRef.current;
     setRegeneratingSection(section);
     setApiError(null);
     mainMutation.mutate(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { data: { youtubeUrl: lastUrlRef.current, ...(lastOptionsRef.current as object), noCache: true, rerollSection: section } as any },
+      { data: { youtubeUrl: requestedUrl, ...(lastOptionsRef.current as object), noCache: true, rerollSection: section } as any },
       {
         onSuccess: (newData: SunoTemplate) => {
-          setCurrentTemplate((prev: SunoTemplate | null) => {
-            if (!prev) return newData;
-            if (section === "style") return { ...prev, styleOfMusic: newData.styleOfMusic, negativePrompt: newData.negativePrompt };
-            if (section === "lyrics") return { ...prev, lyrics: newData.lyrics };
-            return prev;
-          });
+          // See handleRegenerateSection — drop the result if the displayed song changed
+          // while this request was in flight, to avoid grafting stale data onto it.
+          if (lastUrlRef.current === requestedUrl) {
+            setCurrentTemplate((prev: SunoTemplate | null) => {
+              if (!prev) return newData;
+              if (section === "style") return { ...prev, styleOfMusic: newData.styleOfMusic, negativePrompt: newData.negativePrompt };
+              if (section === "lyrics") return { ...prev, lyrics: newData.lyrics };
+              return prev;
+            });
+          }
           setRegeneratingSection(null);
         },
         onError: (err: unknown) => {
