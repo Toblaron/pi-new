@@ -12,6 +12,7 @@ import { validateWithPython } from "../lib/pythonValidator.js";
 import { fetchLastFmTags } from "../lib/lastfm.js";
 import { fetchDiscogsMetadata } from "../lib/discogs.js";
 import { fetchTheAudioDB } from "../lib/theaudiodb.js";
+import { fetchDeezerMetadata } from "../lib/deezer.js";
 import { fuseMetadata, type FusedMetadata } from "../lib/metadataFusion.js";
 import { retryFetch } from "../lib/retryFetch.js";
 import { trackUsage } from "../lib/costTracker.js";
@@ -90,50 +91,50 @@ function formatDuration(seconds: number): string {
  * Strips common YouTube title suffixes to get a clean song title for lyrics lookup.
  * e.g. "Never Gonna Give You Up (Official Video) (4K Remaster)" → "Never Gonna Give You Up"
  */
-function cleanSongTitle(rawTitle: string, artistName: string): { cleanTitle: string; cleanArtist: string } {
-  let title = rawTitle.trim();
-  let artist = artistName.trim();
+// Bracket/paren content that's noise for lookup purposes: quality/format markers, official-upload
+// tags, and edit descriptors — matched by keyword since real titles mix them freely in one group,
+// e.g. "(Official Video Remastered)" or "[4K UPGRADE]".
+const TITLE_NOISE_PATTERN =
+  /\s*[([][^)\]]*\b(official(\s+music)?\s+video|official\s+audio|lyrics?|official\s+visuali[sz]er|remaster(ed)?|4k|hd|hq|upgrade|explicit|clean|radio\s+edit|single|album\s+version|visuali[sz]er|live)\b[^)\]]*[)\]]/gi;
 
-  // If the title starts with "Artist - Song", split them
+const FEATURED_ARTIST_PATTERNS = [
+  /\s*-\s*(ft|feat)\.?\s+[^([\n]+/gi,
+  /\s*\(ft\.?\s+[^)]+\)/gi,
+  /\s*\(feat\.?\s+[^)]+\)/gi,
+];
+
+export function cleanSongTitle(rawTitle: string, artistName: string): { cleanTitle: string; cleanArtist: string } {
+  let title = rawTitle.trim();
+  // YouTube's auto-generated "Artist - Topic" channels are the author for most official
+  // audio-only uploads — strip the suffix so lookups query the real artist name.
+  let artist = artistName.trim().replace(/\s*-\s*topic$/i, "").trim();
+
+  // Normalize en/em dash variants to a plain " - " so one code path handles both.
+  title = title.replace(/\s*[‒–—―]\s*/g, " - ");
+
+  // "Artist - Song": if the leading segment looks like an artist name, split it off.
+  // Guard against "Song - feat. X" (a featured-artist suffix, not an Artist-Song split).
   const dashIdx = title.indexOf(" - ");
   if (dashIdx > 0) {
     const leftPart = title.slice(0, dashIdx).trim();
     const rightPart = title.slice(dashIdx + 3).trim();
-    // Check if leftPart looks like an artist name (not a sentence)
-    if (leftPart.split(" ").length <= 5) {
+    if (leftPart.split(" ").length <= 5 && !/^(ft|feat)\.?\s+/i.test(rightPart)) {
       artist = leftPart;
       title = rightPart;
     }
   }
 
-  // Remove bracketed/parenthesized YouTube-specific suffixes
-  const suffixPatterns = [
-    /\s*\(official\s+(music\s+)?video\)/gi,
-    /\s*\(official\s+audio\)/gi,
-    /\s*\(lyric\s+video\)/gi,
-    /\s*\(lyrics?\s+video\)/gi,
-    /\s*\(official\s+lyrics?\)/gi,
-    /\s*\(official\s+visuali[sz]er\)/gi,
-    /\s*\[official\s+(music\s+)?video\]/gi,
-    /\s*\(4k(\s+remaster(ed)?)?\)/gi,
-    /\s*\(remaster(ed)?(\s+\d{4})?\)/gi,
-    /\s*\(\d{4}\s+remaster(ed)?\)/gi,
-    /\s*\(hd\)/gi,
-    /\s*\(hq\)/gi,
-    /\s*\(audio\)/gi,
-    /\s*\(visuali[sz]er\)/gi,
-    /\s*\(live\s+(at\s+\w+)?\)/gi,
-    /\s*\(explicit\)/gi,
-    /\s*\(clean\)/gi,
-    /\s*\(radio\s+edit\)/gi,
-    /\s*\(single\)/gi,
-    /\s*\(album\s+version\)/gi,
-    /\s*-\s*(ft|feat)\.?\s+[^([\n]+/gi,
-    /\s*\(ft\.?\s+[^)]+\)/gi,
-    /\s*\(feat\.?\s+[^)]+\)/gi,
-  ];
+  // "Song (tags) - Artist": a trailing segment that duplicates the known artist is noise, not title.
+  const lastDashIdx = title.lastIndexOf(" - ");
+  if (lastDashIdx > 0) {
+    const tail = title.slice(lastDashIdx + 3).trim();
+    if (tail.length > 0 && tail.toLowerCase() === artist.toLowerCase()) {
+      title = title.slice(0, lastDashIdx).trim();
+    }
+  }
 
-  for (const pattern of suffixPatterns) {
+  title = title.replace(TITLE_NOISE_PATTERN, "");
+  for (const pattern of FEATURED_ARTIST_PATTERNS) {
     title = title.replace(pattern, "");
   }
 
@@ -393,7 +394,7 @@ async function fetchMusicBrainzData(artist: string, title: string, durationSec?:
  * Parse a YouTube video description for embedded music metadata:
  * producer credits, writer credits, album, label, release year, BPM, key.
  */
-function parseDescriptionForMusicData(description: string): DescriptionMusicData {
+export function parseDescriptionForMusicData(description: string): DescriptionMusicData {
   if (!description) return {};
   const result: DescriptionMusicData = {};
 
@@ -568,11 +569,12 @@ async function fetchBaseMetadata(url: string): Promise<BaseVideoMetadata> {
     console.log(`MusicBrainz: year=${musicBrainz.releaseYear}, genres=[${musicBrainz.genres?.join(", ")}], album="${musicBrainz.album}"`);
   }
 
-  // Enrich with Last.fm, Discogs, TheAudioDB in parallel (all optional — gracefully skip if keys missing)
-  const [lastfmTags, discogsData, theAudioDBData] = await Promise.all([
+  // Enrich with Last.fm, Discogs, TheAudioDB, Deezer in parallel (Deezer is keyless; others gracefully skip if keys missing)
+  const [lastfmTags, discogsData, theAudioDBData, deezerData] = await Promise.all([
     fetchLastFmTags(cleanArtist, cleanTitle),
     fetchDiscogsMetadata(cleanArtist, cleanTitle),
     fetchTheAudioDB(cleanArtist, cleanTitle),
+    fetchDeezerMetadata(cleanArtist, cleanTitle),
   ]);
 
   const fusedSources: Parameters<typeof fuseMetadata>[0] = {
@@ -580,6 +582,7 @@ async function fetchBaseMetadata(url: string): Promise<BaseVideoMetadata> {
     lastfm: lastfmTags,
     discogs: discogsData,
     theaudiodb: theAudioDBData,
+    deezer: deezerData,
   };
   const fusedMetadata = fuseMetadata(fusedSources);
   if (fusedMetadata.sources.length > 0) {
@@ -683,9 +686,12 @@ async function fetchAllMetadata(url: string): Promise<VideoMetadata> {
   return assembleMetadata(base, lyricsData, featuresResult ?? undefined);
 }
 
-function videoIdFromUrl(url: string): string | null {
+const YOUTUBE_HOSTNAMES = new Set(["www.youtube.com", "youtube.com", "youtu.be", "m.youtube.com"]);
+
+export function videoIdFromUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
+    if (!YOUTUBE_HOSTNAMES.has(parsed.hostname)) return null;
     if (parsed.hostname === "youtu.be") return parsed.pathname.slice(1).split("?")[0] || null;
     const v = parsed.searchParams.get("v");
     if (v) return v;
@@ -696,7 +702,7 @@ function videoIdFromUrl(url: string): string | null {
   }
 }
 
-function isValidYouTubeUrl(url: string): boolean {
+export function isValidYouTubeUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return (
@@ -837,7 +843,7 @@ function trimToCharLimit(text: string, limit: number): string {
 }
 
 /** Hard-trim styleOfMusic to 999 chars, breaking at the last comma boundary */
-function trimStylePrompt(text: string, limit = 999): string {
+export function trimStylePrompt(text: string, limit = 999): string {
   const flat = text.replace(/\r?\n/g, " ").trim();
   if (flat.length <= limit) return flat;
   const cut = flat.slice(0, limit);
@@ -2013,7 +2019,7 @@ const GENRE_TO_TEMPO: Record<string, string> = {
   "New Age": "slow", "Chillwave": "slow",
 };
 
-function mapMbTagsToGenres(mbTags: string[]): string[] {
+export function mapMbTagsToGenres(mbTags: string[]): string[] {
   const mapped: string[] = [];
   for (const tag of mbTags) {
     const key = tag.toLowerCase().trim();
@@ -2025,7 +2031,7 @@ function mapMbTagsToGenres(mbTags: string[]): string[] {
   return mapped.slice(0, 5);
 }
 
-function yearToEra(releaseYear?: string): string | null {
+export function yearToEra(releaseYear?: string): string | null {
   if (!releaseYear) return null;
   const y = parseInt(releaseYear, 10);
   if (isNaN(y)) return null;
@@ -2039,7 +2045,7 @@ function yearToEra(releaseYear?: string): string | null {
   return "modern";
 }
 
-function inferEnergy(genres: string[]): string | null {
+export function inferEnergy(genres: string[]): string | null {
   for (const g of genres) {
     const e = GENRE_TO_ENERGY[g];
     if (e) return e;
@@ -2047,7 +2053,7 @@ function inferEnergy(genres: string[]): string | null {
   return null;
 }
 
-function inferTempo(genres: string[]): string | null {
+export function inferTempo(genres: string[]): string | null {
   for (const g of genres) {
     const t = GENRE_TO_TEMPO[g];
     if (t) return t;
@@ -2076,7 +2082,7 @@ const GENRE_TO_VOCALS: Record<string, string> = {
   "Techno": "no vocals", "Berlin Techno": "no vocals", "Minimal Techno": "no vocals",
   "Trance": "mixed", "Drum & Bass": "mixed", "Dubstep": "no vocals",
 };
-function inferVocals(genres: string[]): string {
+export function inferVocals(genres: string[]): string {
   for (const g of genres) { if (GENRE_TO_VOCALS[g]) return GENRE_TO_VOCALS[g]; }
   return "mixed";
 }
@@ -2115,7 +2121,7 @@ const GENRE_TO_INSTRUMENTS: Record<string, string[]> = {
   "Cinematic": ["Strings", "Piano", "Brass", "Drums", "Synth"],
   "Ambient": ["Pad", "Synth", "Piano", "Strings", "Drone"],
 };
-function inferInstruments(genres: string[]): string[] {
+export function inferInstruments(genres: string[]): string[] {
   for (const g of genres) {
     const list = GENRE_TO_INSTRUMENTS[g];
     if (list && list.length >= 5) return list.slice(0, 5);
@@ -2153,7 +2159,7 @@ const GENRE_TO_MOODS: Record<string, string[]> = {
   "Soul": ["Soulful", "Cathartic", "Tender", "Triumphant"],
   "Classical": ["Majestic", "Serene", "Cinematic", "Wistful"],
 };
-function inferMoods(genres: string[], validSet: Set<string>): string[] {
+export function inferMoods(genres: string[], validSet: Set<string>): string[] {
   for (const g of genres) {
     const list = GENRE_TO_MOODS[g]?.filter((m) => validSet.has(m));
     if (list && list.length >= 4) return list.slice(0, 4);
@@ -2161,7 +2167,7 @@ function inferMoods(genres: string[], validSet: Set<string>): string[] {
   return [...DEFAULT_MOODS];
 }
 
-function inferNudge(genres: string[], energy: string, tempo: string): string {
+export function inferNudge(genres: string[], energy: string, tempo: string): string {
   const lead = genres[0] ?? "pop";
   const tone = energy === "intense" || energy === "high" ? "punchy" : energy === "very chill" || energy === "chill" ? "laid-back" : "polished";
   const flavour = tempo === "ballad" || tempo === "slow" ? "atmospheric textures" : tempo === "hyper" || tempo === "fast" ? "driving rhythm section" : "groovy mid-tempo bounce";

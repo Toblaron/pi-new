@@ -33,6 +33,7 @@ interface FuseMetadataSources {
   lastfm?: string[] | null;
   discogs?: { genres: string[]; styles: string[] } | null;
   theaudiodb?: { genre?: string; mood?: string; style?: string; bpm?: number } | null;
+  deezer?: { bpm?: number; releaseYear?: string } | null;
   bpmCandidates?: Array<{ value: number; source: string }>;
 }
 
@@ -113,6 +114,17 @@ export function fuseMetadata(sources: FuseMetadataSources): FusedMetadata {
     if (sources.theaudiodb.style) allTags.push(sources.theaudiodb.style);
     if (sources.theaudiodb.bpm && sources.theaudiodb.bpm > 0) {
       bpmCandidates.push({ value: sources.theaudiodb.bpm, source: "theaudiodb" });
+    }
+  }
+
+  // Deezer (BPM candidate + release-year fallback)
+  if (sources.deezer) {
+    contributingSources.push("deezer");
+    if (sources.deezer.bpm && sources.deezer.bpm > 0) {
+      bpmCandidates.push({ value: sources.deezer.bpm, source: "deezer" });
+    }
+    if (!releaseYear && sources.deezer.releaseYear) {
+      releaseYear = sources.deezer.releaseYear;
     }
   }
 

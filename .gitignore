@@ -55,3 +55,6 @@ ziWeQC47
 data/*.db
 data/*.db-shm
 data/*.db-wal
+
+# ytdl-core dumps these debug player scripts to cwd when it can't parse YouTube's decipher function
+/*-player-script.js

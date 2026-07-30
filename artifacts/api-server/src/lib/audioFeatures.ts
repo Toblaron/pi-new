@@ -53,9 +53,10 @@ async function fetchGetSongBPM(
     };
 
     const results = searchData.search;
-    if (!results || results.length === 0) return null;
+    if (!Array.isArray(results) || results.length === 0) return null;
 
     const match = results[0];
+    if (!match) return null;
     let bpm = parseFloat(match.tempo);
     let key = normalizeKey(match.key_of ?? "");
     let timeSig = match.time_sig || "4/4";
