@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart2,
@@ -28,6 +28,13 @@ import { cn } from "@/lib/utils";
 const HISTORY_KEY = "suno-template-history";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const CHART_COLORS = ["#22d3ee", "#818cf8", "#f472b6", "#fb923c", "#34d399", "#fbbf24", "#f87171", "#a78bfa"];
+
+interface TagStat {
+  tag: string;
+  category: "genre" | "mood" | "instrument";
+  count: number;
+  avgRating: number;
+}
 
 interface HistoryEntry {
   id: string;
@@ -144,6 +151,7 @@ export function AnalyticsDashboard({ className }: AnalyticsDashboardProps) {
   const [tab, setTab] = useState<Tab>("overview");
   // Increment to force analytics refresh when panel is re-opened
   const [refreshTick, setRefreshTick] = useState(0);
+  const [tagStats, setTagStats] = useState<TagStat[] | null>(null);
 
   const handleToggle = () => {
     setExpanded((v) => {
@@ -151,6 +159,17 @@ export function AnalyticsDashboard({ className }: AnalyticsDashboardProps) {
       return !v;
     });
   };
+
+  // Server-computed tag effectiveness (avg rating per genre/mood/instrument across the full
+  // rating history, not just this device's local data) — fetched fresh each time the panel opens.
+  useEffect(() => {
+    if (!expanded) return;
+    const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
+    fetch(`${apiBase}/api/tags/stats`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { stats?: TagStat[] } | null) => setTagStats(data?.stats ?? null))
+      .catch(() => setTagStats(null));
+  }, [expanded, refreshTick]);
 
   const analytics = useMemo(() => {
     void refreshTick; // track dependency
@@ -355,6 +374,30 @@ export function AnalyticsDashboard({ className }: AnalyticsDashboardProps) {
                                       <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                                     ))}
                                   </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Highest-rated tags (server-computed from full rating history) */}
+                        {tagStats && tagStats.length > 0 && (
+                          <div>
+                            <p className="font-mono text-[9px] text-zinc-600 uppercase tracking-wider mb-2">
+                              Your Highest-Rated Tags
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {tagStats.slice(0, 10).map((s) => (
+                                <div
+                                  key={`${s.category}:${s.tag}`}
+                                  className="flex items-center gap-1.5 px-2.5 py-1.5 border border-primary/15 bg-primary/4"
+                                  title={`${s.count} uses`}
+                                >
+                                  <Star className="w-3 h-3 text-yellow-400 shrink-0" />
+                                  <span className="font-mono text-[10px] text-zinc-300">{s.tag}</span>
+                                  <span className="font-mono text-[10px] text-zinc-600">
+                                    {s.avgRating.toFixed(1)}★ ×{s.count}
+                                  </span>
                                 </div>
                               ))}
                             </div>

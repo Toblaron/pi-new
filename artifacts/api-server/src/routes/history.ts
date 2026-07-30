@@ -11,6 +11,7 @@ import {
   getShareLink,
   type HistoryEntry,
 } from "../lib/historyStore.js";
+import { computeTagStats } from "../lib/tagStats.js";
 
 const router: IRouter = Router();
 
@@ -121,6 +122,24 @@ router.get("/collections", (_req, res) => {
   } catch (err) {
     console.error("[history] collections error:", err);
     res.status(500).json({ error: "Failed to load collections" });
+  }
+});
+
+/**
+ * GET /api/tags/stats
+ * Average star rating per genre/mood/instrument tag, computed from rated history.
+ * Query params: minCount (default 2) — drop tags used fewer times than this.
+ * Response: { stats: TagStat[] }
+ */
+router.get("/tags/stats", (req, res) => {
+  try {
+    const rawMinCount = parseInt(String(req.query.minCount ?? "2"), 10);
+    const minCount = isNaN(rawMinCount) ? 2 : Math.max(1, rawMinCount);
+    const stats = computeTagStats(minCount);
+    res.json({ stats });
+  } catch (err) {
+    console.error("[history] tag stats error:", err);
+    res.status(500).json({ error: "Failed to compute tag stats" });
   }
 });
 
