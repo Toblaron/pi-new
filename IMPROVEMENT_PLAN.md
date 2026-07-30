@@ -83,11 +83,17 @@ Pi 5 before committing to the approach — real numbers, not estimates:
 ### 3a. Live progress for single generation — DONE
 `POST /api/generate-template/stream` (SSE) ships `metadata → lyrics → ai-generating → validating → done`. **Now stale against 1c** — see 6a, the DSP step added inside the `metadata`→`lyrics` gap has no stage of its own.
 
-### 3b. Decompose `Home.tsx` — NOT DONE
-Still ~3,400 lines, 60+ `useState`. Deliberately **not attempted this session** — mechanical extraction is exactly the kind of change that's easy to get subtly wrong (stale closures, effect-dependency changes) and needs real click-through verification per extraction, which required a browser tool that wasn't available. Do this first once browser access exists — it's explicitly a prerequisite for doing any further frontend feature work safely, per the original plan's ordering.
+### 3b. Decompose `Home.tsx` — IN PROGRESS (2026-07-30)
+Started once browser access existed. Real finding along the way: **no state cluster in this file is actually self-contained** — even the cleanest candidates reach into `currentTemplate`, `apiError`, the last-submitted URL/options refs, `addToHistory`, and (for anything that builds a generation request body) the full style-control selection. The original "mechanical, zero-coupling" framing undersold this. Approach settled on: each hook owns its own state/handlers but accepts cross-cutting values as parameters rather than reaching into shared scope or introducing a context — more plumbing per hook, stays low-risk and independently verifiable.
 
-### 3c. Variation diff view — NOT DONE
-`VariationWorkshop.tsx` still renders variations with no highlight of what changed vs. the base template.
+Two hooks extracted so far, both **verified live** via the connected browser (not just typecheck):
+- `useVariationWorkshop` (4 states + 2 handlers) — verified: generated real variations, confirmed diff view, merged one back, confirmed it flowed into history/Song DNA correctly.
+- `useBatchMode` (8 states + 1 ref + 4 handlers) — verified: ran a real 2-track batch, confirmed SSE progress, confirmed `BatchDashboard` rendered "2/2 done" with correct data. Incidental find: original `handleStartBatch`/`handleBatchRetry` were `useCallback`s with a dependency array missing `selectedVoices` despite reading it (stale-closure risk) — moot now since these are plain functions, not a deliberate fix.
+
+`Home.tsx`: 3606 → 3319 lines so far (~8% reduction). Remaining clusters, roughly in ascending order of coupling/risk: history panel (~7 states), suggestions (~7 states), style controls (~17-18 states — the big one, read by nearly everything: generation payload, batch, variations, presets, draft save/restore, artist memory).
+
+### 3c. Variation diff view — ALREADY DONE (pre-existing, discovered during 3b)
+Turns out this exists already — `VariationWorkshop.tsx` has a working word-level diff view (`+added`/`-removed` highlighting, a "DIFF ON" toggle, V1 marked as reference) verified live during `useVariationWorkshop` testing. Whoever wrote this plan item originally (an earlier pass in this same doc) didn't know it had already shipped. Marking done rather than re-implementing.
 
 ### 3d. Compact style export — NOT DONE
 No ≤200-char condensed-style toggle yet for older Suno versions.
