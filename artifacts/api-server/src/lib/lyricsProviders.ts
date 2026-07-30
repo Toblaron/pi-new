@@ -1,5 +1,6 @@
 import { parse as parseHtml } from "node-html-parser";
 import { retryFetch } from "./retryFetch.js";
+import { decodeHtmlEntities } from "./htmlEntities.js";
 
 /** Stage 3 cache payload — lyrics and language. TTL: 7d */
 export interface CachedLyrics {
@@ -79,7 +80,7 @@ async function fetchLyricsFromLrcLib(artist: string, title: string, durationSec?
  * Simple heuristic language detector from lyrics text.
  * Checks Unicode character ranges. Falls back to "English".
  */
-function detectLanguage(text: string): string {
+export function detectLanguage(text: string): string {
   if (!text || text.length < 20) return "English";
   const sample = text.slice(0, 600);
   if (/[가-힯]/.test(sample)) return "Korean";
@@ -97,21 +98,24 @@ function detectLanguage(text: string): string {
 }
 
 /**
- * Parse a Genius lyrics HTML container div into plain text.
+ * Parse a Genius lyrics HTML container element into plain text.
  * Preserves [Verse 1], [Chorus] etc. section headers embedded in the HTML.
  * Converts <br> to newlines, strips all other tags.
+ *
+ * Genius marks non-lyrics chrome inside the container (the "N Contributors" credit button
+ * and the language-translations dropdown) with data-exclude-from-selection="true" — their own
+ * signal that browser copy/paste should skip it. Without stripping these first, their contents
+ * (including translated language names in their own script, e.g. "Русский", "한국어") end up
+ * prepended to the actual lyrics text, corrupting both the lyrics and language detection.
  */
-function parseGeniusContainer(html: string): string {
-  return html
+export function parseGeniusContainer(container: ReturnType<typeof parseHtml>): string {
+  for (const excluded of container.querySelectorAll("[data-exclude-from-selection='true']")) {
+    excluded.parentNode?.removeChild(excluded);
+  }
+  const stripped = container.innerHTML
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/?[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .trim();
+    .replace(/<\/?[^>]+>/g, "");
+  return decodeHtmlEntities(stripped).trim();
 }
 
 /**
@@ -180,7 +184,7 @@ async function fetchLyricsFromGenius(artist: string, title: string): Promise<{ l
     let lyrics = "";
     let hasStructure = false;
     for (const container of containers) {
-      const text = parseGeniusContainer(container.innerHTML);
+      const text = parseGeniusContainer(container);
       lyrics += text + "\n\n";
       if (/\[(?:Verse|Chorus|Bridge|Pre-?Chorus|Outro|Intro|Hook)\s*\d*\b/i.test(text)) hasStructure = true;
     }

@@ -43,13 +43,31 @@ export async function downloadAudioSample(url: string): Promise<string | null> {
     );
   } catch (err) {
     log.warn("[audioDownload] yt-dlp failed", (err as Error).message?.slice(0, 200));
+    // A failed/timed-out/oversize-aborted download can still leave a partial file (or yt-dlp's
+    // own <name>.part) behind on tmpfs — clean it up rather than leaking it until reboot.
+    await cleanupByStem(stem);
     return null;
   }
 
   // yt-dlp substitutes %(ext)s with the actual container extension (m4a, webm, ...); find it.
-  const files = await readdir(tmpdir());
-  const match = files.find((f) => f.startsWith(stem));
+  const match = await findByStem(stem);
   return match ? join(tmpdir(), match) : null;
+}
+
+async function findByStem(stem: string): Promise<string | undefined> {
+  const files = await readdir(tmpdir());
+  return files.find((f) => f.startsWith(stem));
+}
+
+async function cleanupByStem(stem: string): Promise<void> {
+  try {
+    const files = await readdir(tmpdir());
+    await Promise.all(
+      files.filter((f) => f.startsWith(stem)).map((f) => unlink(join(tmpdir(), f)).catch(() => undefined)),
+    );
+  } catch {
+    // best-effort — tmpdir unreadable would be a bigger problem than a leaked file
+  }
 }
 
 export async function cleanupAudioSample(path: string): Promise<void> {

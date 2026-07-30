@@ -4,6 +4,7 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import ytdl from "@distube/ytdl-core";
 import { detectAudioFeatures, dspResultToAudioFeatures, type AudioFeatures } from "../lib/audioFeatures.js";
 import { analyzeAudioDsp, checkDspAnalysisAvailable } from "../lib/dspAnalysis.js";
+import { decodeHtmlEntities } from "../lib/htmlEntities.js";
 import { analyzeLyricsStructure } from "../lib/lyricsStructure.js";
 import { computeSuggestedDefaults } from "../lib/suggestedDefaults.js";
 import { cacheGet, cacheSet, cacheStats, hashParams, TTL } from "../lib/cache.js";
@@ -219,14 +220,7 @@ async function fetchCaptions(info: ytdl.videoInfo): Promise<string | null> {
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
-      .map((l) =>
-        l
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-      );
+      .map((l) => decodeHtmlEntities(l));
 
     const uniqueLines: string[] = [];
     for (const line of lines) {
@@ -1465,13 +1459,7 @@ async function fetchPlaylistTracks(
     const titleMatch = titleRegex.exec(entry);
     if (!videoIdMatch || !titleMatch) continue;
     const videoId = videoIdMatch[1].trim();
-    const rawTitle = titleMatch[1]
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .trim();
+    const rawTitle = decodeHtmlEntities(titleMatch[1]).trim();
     allParsed.push({
       videoId,
       title: rawTitle,
@@ -1900,8 +1888,7 @@ router.get("/youtube-preview", async (req, res) => {
         const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
           ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
         if (m?.[1]) {
-          const rawTitle = m[1]
-            .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+          const rawTitle = decodeHtmlEntities(m[1]);
           const { cleanTitle, cleanArtist } = cleanSongTitle(rawTitle, "");
           if (cleanTitle) {
             console.log(`[youtube-preview] HTML fallback OK: "${cleanTitle}" by "${cleanArtist}"`);
