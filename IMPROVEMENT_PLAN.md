@@ -97,8 +97,8 @@ Four hooks extracted, all **verified live** via the connected browser (not just 
 ### 3c. Variation diff view — ALREADY DONE (pre-existing, discovered during 3b)
 Turns out this exists already — `VariationWorkshop.tsx` has a working word-level diff view (`+added`/`-removed` highlighting, a "DIFF ON" toggle, V1 marked as reference) verified live during `useVariationWorkshop` testing. Whoever wrote this plan item originally (an earlier pass in this same doc) didn't know it had already shipped. Marking done rather than re-implementing.
 
-### 3d. Compact style export — NOT DONE
-No ≤200-char condensed-style toggle yet for older Suno versions.
+### 3d. Compact style export — DONE (2026-07-30)
+Added a "Compact" toggle to the Style of Music section (`lib/compactStyle.ts`) — keeps era/genre/subgenre/BPM/key plus the Vocal Identity clause (label stripped), drops the hardware/signal-chain detail, bounded to ≤200 chars. Pure client-side transformation, no AI call. Verified live: toggled it on a real generation, confirmed the copy button (inline "Copied!" + toast). Verification surfaced a real AI-output inconsistency worth knowing — the labeled fields (`Neural Floor:`, `Vocal Identity:`, etc.) aren't always literally present in the AI's output; sometimes it writes the same content unlabeled. The function degrades gracefully when labels are absent (falls back to a comma-boundary truncation of the header) rather than crashing — confirmed with a real generation that hit exactly this case.
 
 ---
 
