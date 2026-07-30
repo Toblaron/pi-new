@@ -44,8 +44,9 @@ import {
   Keyboard,
   RefreshCw,
 } from "lucide-react";
-import { useGenerateSunoTemplate, useGenerateVariations } from "@workspace/api-client-react";
-import type { SunoTemplate, LyricsStructure, SuggestedDefaults, BatchTrackResult, PlaylistTrack, VariationsResponse, VariationSlot } from "@workspace/api-client-react";
+import { useGenerateSunoTemplate } from "@workspace/api-client-react";
+import type { SunoTemplate, LyricsStructure, SuggestedDefaults, BatchTrackResult, PlaylistTrack } from "@workspace/api-client-react";
+import { useVariationWorkshop } from "@/hooks/useVariationWorkshop";
 import { lazy, Suspense } from "react";
 import { TemplateResult } from "@/components/TemplateResult";
 import { LyricsStructurePanel, type ConfirmedSection } from "@/components/LyricsStructurePanel";
@@ -319,7 +320,7 @@ const ALL_ENERGIES = ["very chill", "chill", "medium", "high", "intense"] as con
 const ALL_TEMPOS = ["ballad", "slow", "mid", "groove", "uptempo", "fast", "hyper"] as const;
 const ALL_VOCALS = ["male", "female", "mixed", "duet", "no vocals"] as const;
 
-interface UsedOptions {
+export interface UsedOptions {
   genres?: string[];
   moods?: string[];
   instruments?: string[];
@@ -490,7 +491,6 @@ function formatRelativeTime(ts: number): string {
 
 export default function Home() {
   const mainMutation = useGenerateSunoTemplate();
-  const variationsMutation = useGenerateVariations();
   const { isOnline, isOfflineMode, isInstallable, isIOS, promptInstall, reportApiFailure, clearApiFailure } = usePWA();
   const [showIOSInstallTip, setShowIOSInstallTip] = useState(false);
   const [installDismissed, setInstallDismissed] = useState(false);
@@ -542,11 +542,6 @@ export default function Home() {
 
   // Keyboard shortcuts help modal
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-
-  const [variationWorkshop, setVariationWorkshop] = useState<(SunoTemplate | null | { error: string })[] | null>(null);
-  const [variationPending, setVariationPending] = useState<boolean[]>([]);
-  const [variationCount, setVariationCount] = useState<2 | 3 | 4>(2);
-  const [isGeneratingVariations, setIsGeneratingVariations] = useState(false);
 
   const [remixChain, setRemixChain] = useState<RemixSnapshot[]>([]);
   const [remixChainIndex, setRemixChainIndex] = useState<number>(0);
@@ -1342,59 +1337,18 @@ export default function Home() {
     }
   };
 
-  const handleGenerateVariations = () => {
-    if (!lastUrlRef.current) return;
-    const count = variationCount;
-
-    setIsGeneratingVariations(true);
-    setVariationWorkshop(Array(count).fill(null));
-    setVariationPending(Array(count).fill(true));
-    setApiError(null);
-
-    variationsMutation.mutate(
-      {
-        data: {
-          youtubeUrl: lastUrlRef.current!,
-          ...(lastOptionsRef.current as object),
-          count,
-        },
-      },
-      {
-        onSuccess: (data: VariationsResponse) => {
-          const slots = data.slots.map(
-            (s: VariationSlot): SunoTemplate | null | { error: string } =>
-              s.template ? s.template : { error: s.error ?? "Generation failed" }
-          );
-          setVariationWorkshop(slots);
-          setVariationPending([]);
-          setIsGeneratingVariations(false);
-        },
-        onError: (err: unknown) => {
-          setApiError(
-            (err as { data?: { error?: string }; message?: string })?.data?.error ??
-              (err as Error)?.message ??
-              "Failed to generate variations"
-          );
-          setVariationPending([]);
-          setVariationWorkshop(null);
-          setIsGeneratingVariations(false);
-        },
-      }
-    );
-  };
-
-  const handleMergeVariation = (merged: SunoTemplate) => {
-    setCurrentTemplate(merged);
-    setVariationWorkshop(null);
-    addToHistory(lastUrlRef.current, merged);
-    const allText = [
-      `TITLE: ${merged.title ?? ""}`,
-      `\nSTYLE OF MUSIC:\n${merged.styleOfMusic ?? ""}`,
-      `\nNEGATIVE PROMPT:\n${merged.negativePrompt ?? ""}`,
-      `\nLYRICS:\n${merged.lyrics ?? ""}`,
-    ].join("\n");
-    navigator.clipboard.writeText(allText).catch(() => undefined);
-  };
+  const {
+    variationWorkshop,
+    setVariationWorkshop,
+    variationPending,
+    setVariationPending,
+    variationCount,
+    setVariationCount,
+    isGeneratingVariations,
+    setIsGeneratingVariations,
+    handleGenerateVariations,
+    handleMergeVariation,
+  } = useVariationWorkshop({ lastUrlRef, lastOptionsRef, setApiError, setCurrentTemplate, addToHistory });
 
   const parseBatchUrls = useCallback((text: string): string[] => {
     const lines = text.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
