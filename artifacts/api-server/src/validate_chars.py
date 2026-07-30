@@ -149,6 +149,70 @@ _CYCLE_INSTRUMENTAL = itertools.cycle(_INSTRUMENTAL_SECTIONS)
 _CYCLE_OUTRO = itertools.cycle(_OUTRO_EXTENSIONS)
 _CYCLE_DIRECTION = itertools.cycle(_PERFORMANCE_DIRECTIONS)
 
+# ── styleOfMusic padding pool ─────────────────────────────────────────────────
+# LLMs are unreliable at hitting an exact character-count target by instruction
+# alone — real production data shows the AI landing under 900 chars often
+# enough (verified: 4 of 5 generations in one sample window) that "try harder"
+# prompt wording isn't sufficient. These are generic-but-plausible mix/master
+# engineering clauses (real hardware/technique names, dB/ms/ratio precision
+# matching the rest of the prompt's density) that can append to virtually any
+# style prompt without being genre-specific or factually wrong for a given
+# song — same spirit as the lyrics padding pool above, applied to a single
+# comma-separated line instead of newline blocks.
+_STYLE_PADDING_CLAUSES = [
+    "parallel compression blend +3dB",
+    "true-peak limiting -1dBTP ceiling",
+    "stereo widening via Haas delay 15ms",
+    "harmonic saturation via analog tape emulation",
+    "dynamic de-essing 6-8kHz",
+    "mono-compatible low end below 100Hz",
+    "analog console summing warmth",
+    "vintage plate reverb tail 1.2s decay",
+    "mid-side EQ balancing +1dB at 2kHz",
+    "transient shaping on drum bus +2dB attack",
+    "gentle bus saturation via Neve summing",
+    "high-pass filter 30Hz cleanup on low end",
+    "stereo bus glue compression 2:1 ratio",
+    "vinyl-style low-pass roll-off above 16kHz",
+    "subtle wow-and-flutter modulation 0.3%",
+    "analog hiss layer -40dB noise floor",
+    "room mic bleed blended -12dB",
+    "sidechain ducking on pads triggered by kick",
+    "harmonic exciter +1.5dB at 8kHz presence",
+    "multiband compression on master bus",
+]
+
+_CYCLE_STYLE_PAD = itertools.cycle(_STYLE_PADDING_CLAUSES)
+
+
+def pad_style_prompt(text: str, target_min: int = 900, target_max: int = 975) -> str:
+    """
+    Deterministically append mix/master engineering clauses (comma-separated,
+    same density/style as the rest of the prompt) until len(text) >= target_min.
+    Skips clauses already present (rare, but the AI sometimes independently
+    includes similar phrasing). Never exceeds target_max so a clean trim can
+    still happen if needed. Returns text unchanged if already >= target_min.
+    """
+    if len(text) >= target_min:
+        return text
+
+    result = text.rstrip().rstrip(",")
+    seen_lower = result.lower()
+    attempts = 0
+
+    while len(result) < target_min and attempts < len(_STYLE_PADDING_CLAUSES):
+        clause = next(_CYCLE_STYLE_PAD)
+        attempts += 1
+        if clause.lower() in seen_lower:
+            continue
+        candidate = result + ", " + clause
+        if len(candidate) > target_max:
+            continue
+        result = candidate
+        seen_lower = result.lower()
+
+    return result
+
 
 def _strip_tail_tags(text: str) -> tuple[str, str]:
     """Remove [Fade Out] / [End] from the tail; return (body, tail)."""
@@ -269,6 +333,13 @@ def process(data: dict) -> dict:
         # Pad lyrics if too short (Python-enforced — no AI needed)
         if key == "lyrics" and len(value) < lo:
             value = pad_lyrics(value, target_min=lo, target_max=hi - 20)
+            padded = True
+
+        # Pad styleOfMusic if too short — the AI misses its 900-char target often
+        # enough (verified from production logs) that this needs a real fix, not
+        # just a stronger prompt instruction.
+        if key == "styleOfMusic" and len(value) < lo:
+            value = pad_style_prompt(value, target_min=lo, target_max=hi - 20)
             padded = True
 
         final = len(value)
