@@ -75,6 +75,15 @@ export function MoodBoard({ onApplySettings, className }: MoodBoardProps) {
 
   const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+  // Clears the previous translation whenever the description text changes — without this, editing
+  // the text after translating left the stale result (and its "Apply Settings" button) on screen,
+  // so a user could apply a translation that no longer matches what's actually in the box.
+  const updateDescription = (value: string) => {
+    setDescription(value);
+    if (result) setResult(null);
+    if (applied) setApplied(false);
+  };
+
   const handleTranslate = async () => {
     if (description.trim().length < 5) return;
     setLoading(true);
@@ -150,7 +159,7 @@ export function MoodBoard({ onApplySettings, className }: MoodBoardProps) {
                   {EXAMPLE_VIBES.map((vibe) => (
                     <button
                       key={vibe}
-                      onClick={() => setDescription(vibe)}
+                      onClick={() => updateDescription(vibe)}
                       className="font-mono text-[10px] px-2 py-1 border border-zinc-700/50 text-zinc-500 hover:border-primary/30 hover:text-zinc-300 transition-all text-left leading-snug"
                     >
                       "{vibe}"
@@ -166,7 +175,7 @@ export function MoodBoard({ onApplySettings, className }: MoodBoardProps) {
                 </label>
                 <textarea
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => updateDescription(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="e.g. late night city drive, neon lights, bittersweet nostalgia, 80s feeling..."
                   rows={3}

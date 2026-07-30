@@ -116,7 +116,7 @@ const MISSING_DIMENSION_CHECKS = [
   },
   {
     id: "missing-vocal-style",
-    patterns: [/\bvocal\b/i, /\bvoice\b/i, /\bsinger\b/i, /\bmale\b/i, /\bfemale\b/i, /\btenor\b/i, /\bsoprano\b/i, /\bbaritone\b/i, /\bchoir\b/i, /\brap\b/i, /\bscream\b/i, /\bno vocal\b/i, /\binstrumental\b/i, /\bduet\b/i, /\bcall.and.response\b/i, /\bharmor\b/i, /\bfalset\b/i, /\bwhisper\b/i],
+    patterns: [/\bvocal\b/i, /\bvoice\b/i, /\bsinger\b/i, /\bmale\b/i, /\bfemale\b/i, /\btenor\b/i, /\bsoprano\b/i, /\bbaritone\b/i, /\bchoir\b/i, /\brap\b/i, /\bscream\b/i, /\bno vocal\b/i, /\binstrumental\b/i, /\bduet\b/i, /\bcall.and.response\b/i, /\bharmon\w*\b/i, /\bfalsetto\b/i, /\bwhisper\b/i],
     title: "No vocal style mentioned",
     detail: "Specifying a vocal style (e.g. 'female lead vocals', 'no vocals', 'male baritone') prevents Suno from guessing",
     fix: "Add vocal style: e.g. append 'female lead vocals' or 'no vocals, instrumental'",

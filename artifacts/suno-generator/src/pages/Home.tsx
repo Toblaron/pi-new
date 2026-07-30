@@ -434,6 +434,7 @@ export default function Home() {
     templateRating, setTemplateRating,
     hoverRating, setHoverRating,
     ratingSaved, setRatingSaved,
+    currentHistoryEntryId, setCurrentHistoryEntryId,
     loadAndMergeHistory,
     extractUsedOptions,
     buildFeedbackContext,
@@ -845,7 +846,25 @@ export default function Home() {
     if (!showStyleControls) setShowStyleControls(true);
   };
 
+  // Same values every preset-controlled field starts at on first mount — reapplied before every
+  // preset switch (and on toggle-off) so a field a preset doesn't mention can't keep leftover
+  // state from whichever preset was active before it. Previously, fields a preset left
+  // unspecified (e.g. "Epic Orchestral" never sets tempo) simply kept whatever a *previous*
+  // preset had set them to, and clicking the active preset again only cleared the highlight
+  // without reverting anything it had changed.
+  const applyPresetDefaults = () => {
+    setMode(null);
+    setEnergyLevel("auto");
+    setTempo(null);
+    setSelectedMoods([]);
+    setSelectedInstruments([]);
+    setSelectedVoices([]);
+    setGenreNudge("");
+    setExcludeTags([]);
+  };
+
   const applyPreset = (preset: CreativePreset) => {
+    applyPresetDefaults();
     if (activePreset === preset.id) {
       setActivePreset(null);
       return;
@@ -965,6 +984,7 @@ export default function Home() {
     setTemplateRating(null);
     setHoverRating(null);
     setRatingSaved(false);
+    setCurrentHistoryEntryId(null);
     setLyricsStructure(null);
     setRemixChain([]);
     setRemixChainIndex(0);
@@ -981,7 +1001,7 @@ export default function Home() {
 
     const handleSuccess = (data: SunoTemplate) => {
       setCurrentTemplate(data);
-      addToHistory(values.youtubeUrl, data, usedOpts);
+      setCurrentHistoryEntryId(addToHistory(values.youtubeUrl, data, usedOpts));
       if (data.lyricsStructure) setLyricsStructure(data.lyricsStructure);
       if (data.suggestedDefaults) {
         setSuggestedDefaults(data.suggestedDefaults);
@@ -1110,7 +1130,10 @@ export default function Home() {
     setIsGeneratingVariations,
     handleGenerateVariations,
     handleMergeVariation,
-  } = useVariationWorkshop({ lastUrlRef, lastOptionsRef, setApiError, setCurrentTemplate, addToHistory });
+  } = useVariationWorkshop({
+    lastUrlRef, lastOptionsRef, setApiError, setCurrentTemplate, addToHistory,
+    setCurrentHistoryEntryId, setTemplateRating, extractUsedOptions,
+  });
 
   const {
     batchMode, setBatchMode,
@@ -1164,6 +1187,11 @@ export default function Home() {
     form.setValue("youtubeUrl", entry.youtubeUrl);
     lastUrlRef.current = entry.youtubeUrl;
     setCurrentTemplate(entry.template);
+    // Resync both to the loaded entry — without this, the star widget kept showing whatever
+    // rating was left over from the previously-displayed template, and clicking a star would
+    // silently overwrite the wrong entry (rateCurrentTemplate targets currentHistoryEntryId).
+    setCurrentHistoryEntryId(entry.id);
+    setTemplateRating(entry.rating ?? null);
     setShowHistory(false);
     setVariationWorkshop(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1206,6 +1234,7 @@ export default function Home() {
     setTemplateRating(null);
     setHoverRating(null);
     setRatingSaved(false);
+    setCurrentHistoryEntryId(null);
     setLyricsStructure(null);
     setConfirmedStructure(null);
     setSuggestedDefaults(null);
@@ -1473,7 +1502,7 @@ export default function Home() {
                     placeholder="https://youtube.com/watch?v=..."
                     className="w-full py-3 pr-4 bg-transparent border-none text-foreground placeholder:text-zinc-700 focus:outline-none focus:ring-0 text-sm font-mono"
                     autoComplete="off"
-                    disabled={isLoading}
+                    disabled={isLoading || isGeneratingVariations}
                   />
                   {/* Clear draft X button */}
                   {(urlValue || selectedGenres.length > 0 || selectedMoods.length > 0 || excludeTags.length > 0) && (
@@ -1519,7 +1548,7 @@ export default function Home() {
 
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || isGeneratingVariations}
                   className="shrink-0 px-6 py-3 sm:py-0 font-mono font-bold text-sm uppercase tracking-wider border border-primary bg-primary text-black hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
@@ -1543,7 +1572,7 @@ export default function Home() {
                   onBlur={() => {
                     const playlistUrl = detectPlaylistUrl(batchUrlsText);
                     if (playlistUrl && !playlistPreview) {
-                      fetchPlaylistPreview(playlistUrl);
+                      fetchPlaylistPreview(playlistUrl, batchUrlsText);
                     }
                   }}
                   placeholder={"Paste YouTube URLs, one per line:\nhttps://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=...\n\nOr paste a playlist URL:\nhttps://youtube.com/playlist?list=..."}
@@ -1815,7 +1844,19 @@ export default function Home() {
                 transition={{ duration: 0.25 }}
                 className="overflow-hidden"
               >
-                <div className="bg-card border border-primary/15 p-4 space-y-4">
+                <div
+                  className={cn(
+                    "bg-card border border-primary/15 p-4 space-y-4 transition-opacity",
+                    // Style controls otherwise stay fully interactive during generation — edits
+                    // made while a ~10-30s request is in flight get silently overwritten when it
+                    // resolves (server-suggested instrumentHints, or the stale pre-edit selection
+                    // gets saved into per-artist localStorage memory). `inert` blocks pointer AND
+                    // keyboard interaction for every nested chip/selector without touching each
+                    // one's individual handler.
+                    isLoading && "opacity-50"
+                  )}
+                  inert={isLoading}
+                >
                   {/* Artist memory banner */}
                   {artistMemoryBanner && (
                     <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/8 border border-yellow-500/20 text-xs text-yellow-400 font-mono">
@@ -2152,6 +2193,7 @@ export default function Home() {
                       if (settings.instruments?.length) setSelectedInstruments(settings.instruments.slice(0, MAX_INSTRUMENTS));
                       if (settings.energy) setEnergyLevel(settings.energy as typeof energyLevel);
                       if (settings.era) setEra(settings.era as typeof era);
+                      if (settings.tempo) setTempo(settings.tempo as typeof tempo);
                     }}
                   />
 
@@ -2558,8 +2600,17 @@ export default function Home() {
                 <BatchDashboard
                   tracks={batchTracks}
                   onRetry={handleBatchRetry}
-                  onUseTemplate={(template) => {
-                    setCurrentTemplate(template);
+                  onUseTemplate={(track) => {
+                    if (!track.template) return;
+                    // Sync url/lastUrlRef same as handleLoadHistory — without this, Share,
+                    // Regenerate, Re-roll, and MultiTrackBuilder either silently no-op (empty
+                    // lastUrlRef) or act on a stale URL left over from an earlier single
+                    // generation in the same session.
+                    form.setValue("youtubeUrl", track.url);
+                    lastUrlRef.current = track.url;
+                    setCurrentTemplate(track.template);
+                    setCurrentHistoryEntryId(addToHistory(track.url, track.template, extractUsedOptions()));
+                    setTemplateRating(null);
                     setBatchMode(false);
                     setBatchTracks(null);
                     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2800,6 +2851,7 @@ export default function Home() {
                     if (settings.instruments?.length) setSelectedInstruments(settings.instruments.slice(0, MAX_INSTRUMENTS));
                     if (settings.energy) setEnergyLevel(settings.energy as typeof energyLevel);
                     if (settings.era) setEra(settings.era as typeof era);
+                    if (settings.tempo) setTempo(settings.tempo as typeof tempo);
                   }}
                 />
               </div>
@@ -3031,11 +3083,3 @@ function ResetAutoFillButton({ value, onClick }: { value: string; onClick: () =>
   );
 }
 
-function SparkleIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-      <path d="M5 3v4" /><path d="M19 17v4" /><path d="M3 5h4" /><path d="M17 19h4" />
-    </svg>
-  );
-}

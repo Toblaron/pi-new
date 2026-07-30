@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Layers,
@@ -235,6 +235,13 @@ export function MultiTrackBuilder({
   const { copy } = useCopyToClipboard();
 
   const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  // Without this, generating an arrangement for song A then generating a new main template for
+  // song B (without touching this panel) left A's tracks on screen looking as if they were B's.
+  useEffect(() => {
+    setTracks(null);
+    setError(null);
+  }, [youtubeUrl]);
 
   const handleGenerate = async () => {
     if (!youtubeUrl) return;

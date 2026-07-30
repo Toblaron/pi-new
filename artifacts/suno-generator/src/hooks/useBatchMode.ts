@@ -62,7 +62,7 @@ export function useBatchMode(deps: {
     return null;
   }, []);
 
-  const fetchPlaylistPreview = useCallback(async (playlistUrl: string) => {
+  const fetchPlaylistPreview = useCallback(async (playlistUrl: string, currentText: string) => {
     setPlaylistLoading(true);
     setPlaylistError(null);
     setPlaylistPreview(null);
@@ -76,13 +76,18 @@ export function useBatchMode(deps: {
       const data = await resp.json() as { tracks: PlaylistTrack[]; totalCount: number; capped: boolean };
       setPlaylistPreview(data.tracks);
       setPlaylistCapped(data.capped);
-      setBatchUrlsText(data.tracks.map((t) => t.url).join("\n"));
+      // Merge with any manually-added URLs already in the textarea rather than replacing them
+      // outright — same merge handleStartBatch uses below for the inline-expand case.
+      const nonPlaylistUrls = parseBatchUrls(currentText).filter((u) => !u.includes("list="));
+      const expandedUrls = data.tracks.map((t) => t.url);
+      const merged = [...new Set([...expandedUrls, ...nonPlaylistUrls])].slice(0, 20);
+      setBatchUrlsText(merged.join("\n"));
     } catch (err) {
       setPlaylistError((err as Error).message ?? "Failed to load playlist");
     } finally {
       setPlaylistLoading(false);
     }
-  }, []);
+  }, [parseBatchUrls]);
 
   const buildStyleControlBody = () => ({
     vocalGender: vocalGender !== "auto" ? vocalGender : undefined,
@@ -239,11 +244,19 @@ export function useBatchMode(deps: {
       prev ? prev.map((t) => t.index === track.index ? retryTrack : t) : prev
     );
 
+    // Shares batchAbortRef with handleStartBatch — starting a brand-new batch (or another
+    // retry) aborts this one, so a slow retry response can't land after batchTracks has moved
+    // on to a different run and overwrite whichever track now happens to share this index.
+    batchAbortRef.current?.abort();
+    const abort = new AbortController();
+    batchAbortRef.current = abort;
+
     const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
     fetch(`${apiBase}/api/batch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls, ...buildStyleControlBody() }),
+      signal: abort.signal,
     })
       .then(async (resp) => {
         if (!resp.ok || !resp.body) {
@@ -279,7 +292,8 @@ export function useBatchMode(deps: {
           }
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        if ((err as Error).name === "AbortError") return;
         setBatchTracks((prev) =>
           prev ? prev.map((t) => t.index === track.index ? { ...t, status: "failed", error: "Retry failed" } : t) : prev
         );

@@ -166,6 +166,20 @@ const SECTION_LABEL_PRESETS = [
   "Hook", "Breakdown", "Build", "Drop", "Interlude", "Coda",
 ];
 
+// Sections have no server-provided stable id, but the list is both editable (per-item local
+// edit state in SectionPill) and removable — keying by array index caused React to reuse a
+// SectionPill instance (and its in-progress edit state) across a different section entirely
+// whenever an earlier item was removed, letting an uncommitted rename land on the wrong section.
+type SectionWithKey = LyricsSection & { _key: string };
+
+function genKey(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function withKeys(sections: LyricsSection[]): SectionWithKey[] {
+  return sections.map((s) => ({ ...s, _key: genKey() }));
+}
+
 export function LyricsStructurePanel({
   structure,
   onConfirm,
@@ -173,11 +187,11 @@ export function LyricsStructurePanel({
   isLocked,
 }: LyricsStructurePanelProps) {
   const [expanded, setExpanded] = useState(false);
-  const [sections, setSections] = useState<LyricsSection[]>(structure.sections);
+  const [sections, setSections] = useState<SectionWithKey[]>(() => withKeys(structure.sections));
   const [addingLabel, setAddingLabel] = useState<string | null>(null);
 
   useEffect(() => {
-    setSections(structure.sections);
+    setSections(withKeys(structure.sections));
     setAddingLabel(null);
   }, [structure]);
 
@@ -194,20 +208,21 @@ export function LyricsStructurePanel({
   };
 
   const handleAddSection = (label: string) => {
-    const newSection: LyricsSection = {
+    const newSection: SectionWithKey = {
       label,
       lines: [],
       rhymeScheme: "-",
       sentiment: 0,
       isHook: label.toLowerCase().includes("chorus") || label.toLowerCase().includes("hook"),
       repetitionKey: label.toLowerCase().replace(/\s+/g, "_"),
+      _key: genKey(),
     };
     setSections((prev) => [...prev, newSection]);
     setAddingLabel(null);
   };
 
   const handleReset = () => {
-    setSections(structure.sections);
+    setSections(withKeys(structure.sections));
     setAddingLabel(null);
   };
 
@@ -282,7 +297,7 @@ export function LyricsStructurePanel({
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {sections.map((section, i) => (
                   <SectionPill
-                    key={i}
+                    key={section._key}
                     section={section}
                     index={i}
                     onLabelChange={isLocked ? () => {} : handleLabelChange}

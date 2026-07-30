@@ -53,7 +53,7 @@ export function RemixChain({ chain, currentIndex, onRestore, onBranch }: RemixCh
                           ? `Branch here — clears ${chain.length - 1 - i} forward step${chain.length - 1 - i !== 1 ? "s" : ""}`
                           : `Branch from "${snap.label}" — clears forward history`
                       }
-                      className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-yellow-500/60 hover:text-yellow-400"
+                      className="ml-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-yellow-500/60 hover:text-yellow-400"
                     >
                       <RotateCcw className="w-2.5 h-2.5" />
                     </button>

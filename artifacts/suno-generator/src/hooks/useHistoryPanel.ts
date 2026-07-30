@@ -124,6 +124,11 @@ export function useHistoryPanel(deps: {
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [ratingSaved, setRatingSaved] = useState(false);
   const ratingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Which history entry the on-screen template/rating widget actually corresponds to.
+  // Without this, rating and re-display logic used to assume it was always history[0] (the
+  // newest entry) — wrong as soon as an older entry gets loaded via handleLoadHistory while a
+  // newer, already-rated entry still sits at index 0.
+  const [currentHistoryEntryId, setCurrentHistoryEntryId] = useState<string | null>(null);
 
   /** Called once on mount: loads localStorage history, then merges in server history in the background. */
   const loadAndMergeHistory = () => {
@@ -201,7 +206,7 @@ export function useHistoryPanel(deps: {
       : undefined;
   };
 
-  const addToHistory = (url: string, template: SunoTemplate, opts?: UsedOptions) => {
+  const addToHistory = (url: string, template: SunoTemplate, opts?: UsedOptions): string => {
     const { overall: qualityScore } = scoreTemplate(template);
     const entry: HistoryEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -218,6 +223,7 @@ export function useHistoryPanel(deps: {
       return next;
     });
     syncEntryToServer(entry, videoPreview ?? undefined);
+    return entry.id;
   };
 
   const rateCurrentTemplate = (rating: number) => {
@@ -225,13 +231,17 @@ export function useHistoryPanel(deps: {
     setTemplateRating(newRating);
     setHistory((prev) => {
       if (prev.length === 0) return prev;
-      const next = prev.map((e, i) =>
-        i === 0
+      // Rate whichever entry is actually on screen (currentHistoryEntryId), not always the
+      // newest one — falls back to history[0] only when nothing has been explicitly tracked yet
+      // (e.g. a template generated before this hook's id-tracking had a chance to run).
+      const targetId = currentHistoryEntryId ?? prev[0].id;
+      const next = prev.map((e) =>
+        e.id === targetId
           ? { ...e, rating: newRating, usedOptions: e.usedOptions ?? extractUsedOptions() }
           : e
       );
       saveHistory(next);
-      if (next[0]) syncRatingToServer(next[0].id, newRating);
+      syncRatingToServer(targetId, newRating);
       return next;
     });
     if (ratingTimerRef.current) clearTimeout(ratingTimerRef.current);
@@ -297,6 +307,7 @@ export function useHistoryPanel(deps: {
     templateRating, setTemplateRating,
     hoverRating, setHoverRating,
     ratingSaved, setRatingSaved,
+    currentHistoryEntryId, setCurrentHistoryEntryId,
     loadAndMergeHistory,
     extractUsedOptions,
     buildFeedbackContext,

@@ -191,10 +191,15 @@ const RAW_EDGES: [string, string, number][] = [
   ["Vaporwave", "Lo-Fi", 0.6],
 ];
 
+// GENRE_FAMILIES + RAW_EDGES together resolve to ~85 unique genres. The previous
+// slice(0, 60) cap silently dropped everything past insertion-order position 60 — Blues,
+// Classical, Reggae, Lo-Fi, Folk, Trip-Hop, Vaporwave and their edges — with no "no results"
+// messaging when searching for them. 120 is a generous ceiling against future growth, not a
+// real limit on the current dataset (~85 stays well under it).
 const ALL_GENRES = [...new Set([
   ...Object.keys(GENRE_FAMILIES),
   ...RAW_EDGES.flatMap(([a, b]) => [a, b]),
-])].slice(0, 60); // Limit to 60 for performance
+])].slice(0, 120);
 
 function buildNodes(width: number, height: number): GenreNode[] {
   return ALL_GENRES.map((id) => ({

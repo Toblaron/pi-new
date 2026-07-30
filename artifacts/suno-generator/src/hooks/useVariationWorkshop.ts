@@ -16,9 +16,15 @@ export function useVariationWorkshop(deps: {
   lastOptionsRef: React.RefObject<object>;
   setApiError: (error: string | null) => void;
   setCurrentTemplate: (template: SunoTemplate) => void;
-  addToHistory: (url: string, template: SunoTemplate, opts?: UsedOptions) => void;
+  addToHistory: (url: string, template: SunoTemplate, opts?: UsedOptions) => string;
+  setCurrentHistoryEntryId: (id: string | null) => void;
+  setTemplateRating: (rating: number | null) => void;
+  extractUsedOptions: () => UsedOptions;
 }) {
-  const { lastUrlRef, lastOptionsRef, setApiError, setCurrentTemplate, addToHistory } = deps;
+  const {
+    lastUrlRef, lastOptionsRef, setApiError, setCurrentTemplate, addToHistory,
+    setCurrentHistoryEntryId, setTemplateRating, extractUsedOptions,
+  } = deps;
 
   const variationsMutation = useGenerateVariations();
   const [variationWorkshop, setVariationWorkshop] = useState<VariationSlotResult[] | null>(null);
@@ -29,6 +35,10 @@ export function useVariationWorkshop(deps: {
   const handleGenerateVariations = () => {
     if (!lastUrlRef.current) return;
     const count = variationCount;
+    // Captured now, not read again in onSuccess — the URL/options in scope at request time
+    // are the ones this response is actually for, regardless of what the user does meanwhile.
+    const requestedUrl = lastUrlRef.current;
+    const requestedOptions = lastOptionsRef.current;
 
     setIsGeneratingVariations(true);
     setVariationWorkshop(Array(count).fill(null));
@@ -38,18 +48,24 @@ export function useVariationWorkshop(deps: {
     variationsMutation.mutate(
       {
         data: {
-          youtubeUrl: lastUrlRef.current!,
-          ...(lastOptionsRef.current as object),
+          youtubeUrl: requestedUrl,
+          ...(requestedOptions as object),
           count,
         },
       },
       {
         onSuccess: (data: VariationsResponse) => {
-          const slots = data.slots.map(
-            (s: VariationSlot): VariationSlotResult =>
-              s.template ? s.template : { error: s.error ?? "Generation failed" }
-          );
-          setVariationWorkshop(slots);
+          // If the user has since submitted a different song while this was in flight, these
+          // slots are for the wrong song — dropping them (rather than merging one into history
+          // under the new song's URL) prevents a previous bug where a stale variation could get
+          // saved to history tagged with whatever song was submitted afterward.
+          if (lastUrlRef.current === requestedUrl) {
+            const slots = data.slots.map(
+              (s: VariationSlot): VariationSlotResult =>
+                s.template ? s.template : { error: s.error ?? "Generation failed" }
+            );
+            setVariationWorkshop(slots);
+          }
           setVariationPending([]);
           setIsGeneratingVariations(false);
         },
@@ -70,7 +86,8 @@ export function useVariationWorkshop(deps: {
   const handleMergeVariation = (merged: SunoTemplate) => {
     setCurrentTemplate(merged);
     setVariationWorkshop(null);
-    addToHistory(lastUrlRef.current, merged);
+    setCurrentHistoryEntryId(addToHistory(lastUrlRef.current, merged, extractUsedOptions()));
+    setTemplateRating(null);
     const allText = [
       `TITLE: ${merged.title ?? ""}`,
       `\nSTYLE OF MUSIC:\n${merged.styleOfMusic ?? ""}`,

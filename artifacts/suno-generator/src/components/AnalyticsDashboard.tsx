@@ -164,11 +164,19 @@ export function AnalyticsDashboard({ className }: AnalyticsDashboardProps) {
   // rating history, not just this device's local data) — fetched fresh each time the panel opens.
   useEffect(() => {
     if (!expanded) return;
+    // Without the abort, rapidly toggling the panel closed/open (each open bumps refreshTick,
+    // firing a new request) let an earlier, slower response resolve after a later one and
+    // overwrite it with stale data.
+    const controller = new AbortController();
     const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
-    fetch(`${apiBase}/api/tags/stats`)
+    fetch(`${apiBase}/api/tags/stats`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { stats?: TagStat[] } | null) => setTagStats(data?.stats ?? null))
-      .catch(() => setTagStats(null));
+      .catch((err) => {
+        if ((err as Error).name === "AbortError") return;
+        setTagStats(null);
+      });
+    return () => controller.abort();
   }, [expanded, refreshTick]);
 
   const analytics = useMemo(() => {

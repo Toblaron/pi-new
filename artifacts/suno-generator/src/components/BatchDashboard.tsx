@@ -11,14 +11,14 @@ import {
   RefreshCw,
   Music2,
 } from "lucide-react";
-import type { BatchTrackResult, SunoTemplate } from "@workspace/api-client-react";
+import type { BatchTrackResult } from "@workspace/api-client-react";
 import { TemplateResult } from "@/components/TemplateResult";
 import { cn } from "@/lib/utils";
 
 interface BatchDashboardProps {
   tracks: BatchTrackResult[];
   onRetry: (track: BatchTrackResult) => void;
-  onUseTemplate: (template: SunoTemplate) => void;
+  onUseTemplate: (track: BatchTrackResult) => void;
 }
 
 function statusLabel(status: BatchTrackResult["status"]): string {
@@ -62,7 +62,7 @@ function TrackCard({
 }: {
   track: BatchTrackResult;
   onRetry: (t: BatchTrackResult) => void;
-  onUseTemplate: (t: SunoTemplate) => void;
+  onUseTemplate: (t: BatchTrackResult) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -120,7 +120,7 @@ function TrackCard({
           {track.status === "done" && track.template && (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onUseTemplate(track.template!); }}
+              onClick={(e) => { e.stopPropagation(); onUseTemplate(track); }}
               className="flex items-center gap-1 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest border border-primary/30 text-primary/70 hover:border-primary hover:text-primary transition-all"
             >
               Use
