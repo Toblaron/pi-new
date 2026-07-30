@@ -12,6 +12,7 @@ import { fetchLastFmTags } from "../lib/lastfm.js";
 import { fetchDiscogsMetadata } from "../lib/discogs.js";
 import { fetchTheAudioDB } from "../lib/theaudiodb.js";
 import { fetchDeezerMetadata } from "../lib/deezer.js";
+import { fetchITunesMetadata } from "../lib/itunes.js";
 import { fuseMetadata, type FusedMetadata } from "../lib/metadataFusion.js";
 import { retryFetch } from "../lib/retryFetch.js";
 import { trackUsage } from "../lib/costTracker.js";
@@ -352,12 +353,13 @@ async function fetchBaseMetadata(url: string): Promise<BaseVideoMetadata> {
     }
   }
 
-  // Enrich with Last.fm, Discogs, TheAudioDB, Deezer in parallel (Deezer is keyless; others gracefully skip if keys missing)
-  const [lastfmTags, discogsData, theAudioDBData, deezerData] = await Promise.all([
+  // Enrich with Last.fm, Discogs, TheAudioDB, Deezer, iTunes in parallel (Deezer/iTunes are keyless; others gracefully skip if keys missing)
+  const [lastfmTags, discogsData, theAudioDBData, deezerData, itunesData] = await Promise.all([
     fetchLastFmTags(cleanArtist, cleanTitle),
     fetchDiscogsMetadata(cleanArtist, cleanTitle),
     fetchTheAudioDB(cleanArtist, cleanTitle),
     fetchDeezerMetadata(cleanArtist, cleanTitle),
+    fetchITunesMetadata(cleanArtist, cleanTitle),
   ]);
 
   const fusedSources: Parameters<typeof fuseMetadata>[0] = {
@@ -366,6 +368,7 @@ async function fetchBaseMetadata(url: string): Promise<BaseVideoMetadata> {
     discogs: discogsData,
     theaudiodb: theAudioDBData,
     deezer: deezerData,
+    itunes: itunesData,
   };
   const fusedMetadata = fuseMetadata(fusedSources);
   if (fusedMetadata.sources.length > 0) {

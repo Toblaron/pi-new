@@ -27,6 +27,7 @@ interface FuseMetadataSources {
   discogs?: { genres: string[]; styles: string[] } | null;
   theaudiodb?: { genre?: string; mood?: string; style?: string; bpm?: number } | null;
   deezer?: { bpm?: number; releaseYear?: string } | null;
+  itunes?: { genre?: string; releaseYear?: string } | null;
   bpmCandidates?: Array<{ value: number; source: string }>;
 }
 
@@ -118,6 +119,15 @@ export function fuseMetadata(sources: FuseMetadataSources): FusedMetadata {
     }
     if (!releaseYear && sources.deezer.releaseYear) {
       releaseYear = sources.deezer.releaseYear;
+    }
+  }
+
+  // iTunes (genre + release-year fallback; no BPM data)
+  if (sources.itunes) {
+    contributingSources.push("itunes");
+    if (sources.itunes.genre) allGenres.push(sources.itunes.genre);
+    if (!releaseYear && sources.itunes.releaseYear) {
+      releaseYear = sources.itunes.releaseYear;
     }
   }
 

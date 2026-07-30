@@ -75,9 +75,24 @@ describe("fuseMetadata", () => {
       discogs: { genres: [], styles: [] },
       theaudiodb: { genre: "rock" },
       deezer: { bpm: 120 },
+      itunes: { genre: "pop" },
     });
     expect(r.sources).toEqual(
-      expect.arrayContaining(["musicbrainz", "lastfm", "discogs", "theaudiodb", "deezer"]),
+      expect.arrayContaining(["musicbrainz", "lastfm", "discogs", "theaudiodb", "deezer", "itunes"]),
     );
+  });
+
+  it("uses itunes genre and releaseYear as a fallback", () => {
+    const r = fuseMetadata({ itunes: { genre: "Pop", releaseYear: "2014" } });
+    expect(r.genres).toContain("pop");
+    expect(r.releaseYear).toBe("2014");
+  });
+
+  it("prefers musicbrainz releaseYear over itunes", () => {
+    const r = fuseMetadata({
+      mb: { releaseYear: "1999" },
+      itunes: { releaseYear: "2014" },
+    });
+    expect(r.releaseYear).toBe("1999");
   });
 });
