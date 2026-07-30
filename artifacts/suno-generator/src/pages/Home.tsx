@@ -1648,10 +1648,18 @@ export default function Home() {
     fetch("/api/history", { method: "DELETE" }).catch(() => {});
   };
 
-  const handleClearDraft = () => {
+  /** Resets the entire working session back to a blank slate: form inputs, style controls,
+   * the generated result and everything derived from it (preview, suggestions, structure,
+   * variations, remix chain, ratings), and batch/playlist state. Deliberately leaves saved
+   * history and UI display preferences (panel expand/collapse, install prompts) untouched —
+   * those aren't "fields" in the sense this button is for. */
+  const handleResetAll = () => {
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+
+    // Form / style controls
     form.setValue("youtubeUrl", "");
     setSelectedGenres([]);
+    setExpandedGenreCategory(null);
     setSelectedMoods([]);
     setSelectedInstruments([]);
     setVocalGender("auto");
@@ -1661,7 +1669,52 @@ export default function Home() {
     setMode(null);
     setGenreNudge("");
     setExcludeTags([]);
+    setCustomExclusions("");
+    setIsInstrumental(false);
+    setManualLyrics("");
+    setShowManualLyrics(false);
+    setShowNegBuilder(false);
+    setShowStyleControls(false);
     setDraftSaved(false);
+
+    // Generated result and everything derived from it
+    setCurrentTemplate(null);
+    setRegeneratingSection(null);
+    setApiError(null);
+    setTemplateRating(null);
+    setHoverRating(null);
+    setRatingSaved(false);
+    setLyricsStructure(null);
+    setConfirmedStructure(null);
+    setSuggestedDefaults(null);
+    setSuggestions(null);
+    setSuggestLoading(false);
+    setAutoFilledFields(new Set());
+    setAutoFillValues({});
+    setVideoPreview(null);
+    setArtistMemoryBanner(null);
+
+    // Variations and remix chain
+    setVariationWorkshop(null);
+    setVariationPending([]);
+    setVariationCount(2);
+    setIsGeneratingVariations(false);
+    setRemixChain([]);
+    setRemixChainIndex(0);
+    setActiveTransformId(null);
+    setActivePreset(null);
+
+    // Batch / playlist mode
+    setBatchMode(false);
+    setBatchUrlsText("");
+    setBatchTracks(null);
+    setPlaylistPreview(null);
+    setPlaylistCapped(false);
+    setPlaylistLoading(false);
+    setPlaylistError(null);
+
+    lastUrlRef.current = "";
+    lastOptionsRef.current = {};
   };
 
   const handleBulkExport = async () => {
@@ -1946,8 +1999,8 @@ export default function Home() {
                   {(urlValue || selectedGenres.length > 0 || selectedMoods.length > 0 || excludeTags.length > 0) && (
                     <button
                       type="button"
-                      onClick={handleClearDraft}
-                      title="Clear draft — reset URL and all style settings"
+                      onClick={handleResetAll}
+                      title="Reset — clear URL, all style settings, and any generated result"
                       className="pr-3 text-zinc-600 hover:text-zinc-300 transition-colors shrink-0"
                     >
                       <XCircle className="w-4 h-4" />
@@ -1963,6 +2016,17 @@ export default function Home() {
               </div>
 
               <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetAll}
+                  disabled={isLoading}
+                  title="Reset — clear the URL, all style settings, and any generated result"
+                  className="shrink-0 px-3 py-3 sm:py-0 font-mono text-xs uppercase tracking-wider text-zinc-500 border border-primary/20 hover:border-primary/50 hover:text-primary transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleSurpriseMe}
@@ -2110,6 +2174,16 @@ export default function Home() {
                     Cancel
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleResetAll}
+                  disabled={isBatchRunning}
+                  title="Reset — clear all fields and batch state"
+                  className="flex items-center gap-1.5 px-3 py-2.5 font-mono text-xs uppercase tracking-wider text-zinc-500 border border-primary/20 hover:border-primary/50 hover:text-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
               </div>
             </div>
           )}
