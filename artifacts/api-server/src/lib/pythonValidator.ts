@@ -53,6 +53,9 @@ export async function validateWithPython(payload: {
   styleOfMusic: string;
   lyrics: string;
   negativePrompt: string;
+  /** When provided, defensively stripped from styleOfMusic — Suno rejects/ignores
+   * prompts that name a real artist, and the AI occasionally leaks one in anyway. */
+  artistName?: string;
 }): Promise<ValidationReport | null> {
   return new Promise((resolve) => {
     const py = spawn("python3", [SCRIPT], { timeout: 15_000 });

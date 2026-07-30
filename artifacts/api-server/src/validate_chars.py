@@ -30,6 +30,7 @@ JavaScript .length (UTF-16 code units, double-counts emoji).
 import sys
 import json
 import itertools
+import re
 
 LIMITS = {
     "styleOfMusic":   (900,  999),
@@ -217,15 +218,46 @@ def smart_trim(text: str, max_len: int, split_char: str) -> str:
     return sub.rstrip()
 
 
+def scrub_artist_name(text: str, artist_name: str) -> str:
+    """
+    Suno rejects/ignores prompts that name a real artist directly. The AI is
+    instructed not to include one, but occasionally leaks it in — strip it as
+    a defensive final pass. Skipped for very short names (<=2 chars) where a
+    whole-word match would too easily collide with an unrelated common word.
+    """
+    name = artist_name.strip()
+    if not name or len(name) <= 2:
+        return text
+
+    pattern = re.compile(r"(?<!\w)" + re.escape(name) + r"(?!\w)", re.IGNORECASE)
+    if not pattern.search(text):
+        return text
+
+    result = pattern.sub("", text)
+    # Clean up artifacts left by the removal: doubled commas/spaces, and any
+    # comma now dangling at the start or end of the string.
+    result = re.sub(r"\s{2,}", " ", result)
+    result = re.sub(r",\s*,", ",", result)
+    result = re.sub(r"^[,\s]+|[,\s]+$", "", result)
+    return result
+
+
 def process(data: dict) -> dict:
     out_data = {}
     fields = {}
     errors = []
     trimmed = False
     padded = False
+    artist_name = data.get("artistName", "")
 
     for key, (lo, hi) in LIMITS.items():
         value = data.get(key, "")
+
+        # Defensive artist-name scrub, styleOfMusic only — done before length
+        # counting so the reported/validated lengths reflect the final text.
+        if key == "styleOfMusic" and artist_name:
+            value = scrub_artist_name(value, artist_name)
+
         original = len(value)
 
         # Trim if too long

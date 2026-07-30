@@ -1194,6 +1194,7 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
       styleOfMusic:   aiResult.styleOfMusic,
       lyrics:         aiResult.lyrics,
       negativePrompt: aiResult.negativePrompt,
+      artistName:     metadata.cleanArtist,
     });
     if (pyReport) {
       const { fields, valid, trimmed, padded, errors } = pyReport;
