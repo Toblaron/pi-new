@@ -327,7 +327,7 @@ export function MultiTrackBuilder({
             <div className="border-t border-primary/10 p-4 space-y-4">
               {/* Track preview cards (before generation) */}
               {!tracks && !loading && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {(["lead", "harmony", "instrumental", "rhythm"] as TrackId[]).map((id) => {
                     const meta = TRACK_META[id];
                     return (

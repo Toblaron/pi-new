@@ -1872,7 +1872,7 @@ export default function Home() {
                   <p className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest">Style preferences — guide AI output</p>
 
                   {/* Row 1: Vocal + Energy side by side */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                         <Mic2 className="w-3 h-3 text-secondary" /> Vocals
@@ -1908,7 +1908,7 @@ export default function Home() {
                   </div>
 
                   {/* Row 2: Tempo + Era side by side */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                         <Gauge className="w-3 h-3 text-secondary" /> Tempo

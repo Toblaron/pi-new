@@ -231,7 +231,7 @@ export function TransitionBuilder({ className }: TransitionBuilderProps) {
               {/* Transition style */}
               <div className="space-y-2">
                 <label className="font-mono text-[9px] text-zinc-600 uppercase tracking-wider">Transition Style</label>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {STYLE_OPTIONS.map((opt) => (
                     <button
                       key={opt.id}
