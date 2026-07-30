@@ -1,11 +1,4 @@
-// Local definition to avoid circular imports with suno route
-export interface MusicBrainzData {
-  releaseYear?: string;
-  genres?: string[];
-  label?: string;
-  album?: string;
-  isrc?: string;
-}
+import type { MusicBrainzData } from "./musicbrainz.js";
 
 export interface FusedMetadata {
   genres: string[];       // merged, deduplicated
