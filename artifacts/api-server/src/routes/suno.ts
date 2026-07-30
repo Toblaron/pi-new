@@ -1090,7 +1090,12 @@ interface GenerateInput {
 
 type AiOutput = { styleOfMusic: string; title: string; lyrics: string; negativePrompt: string };
 
-async function generateOneTemplate(data: GenerateInput): Promise<ReturnType<typeof GenerateSunoTemplateResponse.parse>> {
+type GenerationStage = "metadata" | "lyrics" | "ai-generating" | "validating" | "done";
+
+async function generateOneTemplate(
+  data: GenerateInput,
+  onStage?: (stage: GenerationStage) => void,
+): Promise<ReturnType<typeof GenerateSunoTemplateResponse.parse>> {
   const { youtubeUrl, manualLyrics, vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, mode, tempo, excludeTags, variationIndex, feedbackContext, isInstrumental, confirmedStructure, noCache } = data;
 
   if (!isValidYouTubeUrl(youtubeUrl)) {
@@ -1126,6 +1131,8 @@ async function generateOneTemplate(data: GenerateInput): Promise<ReturnType<type
       throw new Error("Could not fetch video metadata. Make sure the URL is a valid, public YouTube video.");
     }
   }
+
+  onStage?.("metadata");
 
   // Stage 2: audio features (permanent cache)
   let audioFeatures: AudioFeatures | undefined;
@@ -1176,6 +1183,8 @@ async function generateOneTemplate(data: GenerateInput): Promise<ReturnType<type
   } else {
     cachedLyrics = await fetchLyricsData(base.cleanArtist, base.cleanTitle, base.durationSeconds, base.captionText);
   }
+
+  onStage?.("lyrics");
 
   // BPM cross-check: if TheAudioDB has a BPM and audio features also have one, fuse for confidence
   if (audioFeatures?.bpm && base.fusedMetadata) {
@@ -1431,6 +1440,8 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
     return { styleOfMusic, title, lyrics, negativePrompt };
   };
 
+  onStage?.("ai-generating");
+
   if (templateCacheKey) {
     const cached = cacheGet<AiOutput>(templateCacheKey);
     if (cached) {
@@ -1445,6 +1456,8 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
   } else {
     aiResult = await runAiCall();
   }
+
+  onStage?.("validating");
 
   // ── Python character-count validation + smart trim ───────────────────────
   // Python len() counts Unicode code points; JS .length counts UTF-16 units.
@@ -1530,6 +1543,53 @@ router.post("/generate-template", async (req, res) => {
       message.includes("Invalid YouTube URL") ||
       message.includes("Could not fetch video metadata");
     res.status(isClientError ? 400 : 500).json({ error: message });
+  }
+});
+
+/**
+ * POST /api/generate-template/stream
+ * Same generation pipeline as /api/generate-template, but streams stage progress via SSE
+ * so the frontend can show what's happening instead of a bare spinner. Final event carries
+ * the full template payload — the plain JSON endpoint above is unaffected and still works.
+ */
+router.post("/generate-template/stream", async (req, res) => {
+  const parsed = GenerateSunoTemplateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body. Please provide a youtubeUrl." });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  let clientDisconnected = false;
+  res.on("close", () => { clientDisconnected = true; });
+
+  const heartbeat = setInterval(() => {
+    if (!clientDisconnected) res.write(": heartbeat\n\n");
+  }, 20000);
+
+  const sendEvent = (type: string, data: unknown) => {
+    if (!clientDisconnected) {
+      res.write(`data: ${JSON.stringify({ type, ...(typeof data === "object" && data !== null ? data : { data }) })}\n\n`);
+    }
+  };
+
+  try {
+    const template = await generateOneTemplate(parsed.data, (stage) => {
+      sendEvent("stage", { stage });
+    });
+    sendEvent("done", { template });
+  } catch (err: unknown) {
+    console.error("Error generating template (stream):", err);
+    const message = err instanceof Error ? err.message : "An unexpected error occurred";
+    sendEvent("error", { error: message });
+  } finally {
+    clearInterval(heartbeat);
+    if (!clientDisconnected) res.end();
   }
 });
 
@@ -1720,7 +1780,7 @@ router.post("/batch", async (req, res) => {
 
   // Track client disconnect so we can stop processing early
   let clientDisconnected = false;
-  req.on("close", () => { clientDisconnected = true; });
+  res.on("close", () => { clientDisconnected = true; });
 
   // Send periodic SSE heartbeat comments to prevent proxy idle timeouts
   const heartbeat = setInterval(() => {

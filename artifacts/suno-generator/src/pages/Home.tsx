@@ -479,6 +479,8 @@ export default function Home() {
   const [currentTemplate, setCurrentTemplate] = useState<SunoTemplate | null>(null);
   const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isMainGenerating, setIsMainGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState<string | null>(null);
 
   const [showStyleControls, setShowStyleControls] = useState(false);
   const [showManualLyrics, setShowManualLyrics] = useState(false);
@@ -1148,7 +1150,7 @@ export default function Home() {
     setRemixChainIndex(index);
   }, [remixChain]);
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     const opts = buildOptions();
     lastUrlRef.current = values.youtubeUrl;
     lastOptionsRef.current = opts;
@@ -1170,71 +1172,124 @@ export default function Home() {
       era: era !== "auto" ? era : undefined,
       tempo: tempo ?? undefined,
     };
-    mainMutation.mutate(
-      { data: { youtubeUrl: values.youtubeUrl, ...opts } },
-      {
-        onSuccess: (data: SunoTemplate) => {
-          setCurrentTemplate(data);
-          addToHistory(values.youtubeUrl, data, usedOpts);
-          if (data.lyricsStructure) setLyricsStructure(data.lyricsStructure);
-          if (data.suggestedDefaults) {
-            setSuggestedDefaults(data.suggestedDefaults);
-            const d = data.suggestedDefaults;
-            const newSavedValues: Record<string, string> = {};
-            setAutoFilledFields((prev) => {
-              const next = new Set(prev);
-              if (d.energy && energyLevel === "auto" && !next.has("energy")) {
-                setEnergyLevel(d.energy as typeof energyLevel);
-                next.add("energy");
-                newSavedValues["energy"] = d.energy;
-              }
-              if (d.era && era === "auto" && !next.has("era")) {
-                setEra(d.era as typeof era);
-                next.add("era");
-                newSavedValues["era"] = d.era;
-              }
-              if (d.tempo && !tempo && !next.has("tempo")) {
-                setTempo(d.tempo as "ballad" | "slow" | "mid" | "groove" | "uptempo" | "fast" | "hyper" | null);
-                next.add("tempo");
-                newSavedValues["tempo"] = d.tempo;
-              }
-              return next;
-            });
-            if (Object.keys(newSavedValues).length > 0) {
-              setAutoFillValues((prev) => ({ ...prev, ...newSavedValues }));
-            }
-            if (d.instrumentHints && d.instrumentHints.length > 0 && selectedInstruments.length === 0) {
-              const knownHints = d.instrumentHints.filter((h: string) => INSTRUMENT_TAGS.includes(h)).slice(0, MAX_INSTRUMENTS);
-              if (knownHints.length > 0) {
-                setSelectedInstruments(knownHints);
-                setAutoFilledFields((prev) => { const next = new Set(prev); next.add("instruments"); return next; });
-                setAutoFillValues((prev) => ({ ...prev, instruments: knownHints.join(",") }));
-              }
-            }
-            if (d.languageGenreHint && selectedGenres.length === 0) {
-              setSelectedGenres([d.languageGenreHint]);
-              setAutoFilledFields((prev) => { const next = new Set(prev); next.add("genres"); return next; });
-              setAutoFillValues((prev) => ({ ...prev, genres: d.languageGenreHint! }));
-            }
+
+    const handleSuccess = (data: SunoTemplate) => {
+      setCurrentTemplate(data);
+      addToHistory(values.youtubeUrl, data, usedOpts);
+      if (data.lyricsStructure) setLyricsStructure(data.lyricsStructure);
+      if (data.suggestedDefaults) {
+        setSuggestedDefaults(data.suggestedDefaults);
+        const d = data.suggestedDefaults;
+        const newSavedValues: Record<string, string> = {};
+        setAutoFilledFields((prev) => {
+          const next = new Set(prev);
+          if (d.energy && energyLevel === "auto" && !next.has("energy")) {
+            setEnergyLevel(d.energy as typeof energyLevel);
+            next.add("energy");
+            newSavedValues["energy"] = d.energy;
           }
-          if (data.artist && (selectedGenres.length > 0 || era !== "auto" || energyLevel !== "auto")) {
-            saveArtistStyle(data.artist, {
-              genres: selectedGenres.length > 0 ? selectedGenres : undefined,
-              era: era !== "auto" ? era : undefined,
-              energy: energyLevel !== "auto" ? energyLevel : undefined,
-              tempo: tempo ?? undefined,
-              moods: selectedMoods.length > 0 ? selectedMoods : undefined,
-              instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
-            });
+          if (d.era && era === "auto" && !next.has("era")) {
+            setEra(d.era as typeof era);
+            next.add("era");
+            newSavedValues["era"] = d.era;
           }
-          clearApiFailure();
-        },
-        onError: (err: unknown) => {
-          reportApiFailure();
-          setApiError((err as { data?: { error?: string }; message?: string })?.data?.error ?? (err as Error)?.message ?? "Something went wrong");
-        },
+          if (d.tempo && !tempo && !next.has("tempo")) {
+            setTempo(d.tempo as "ballad" | "slow" | "mid" | "groove" | "uptempo" | "fast" | "hyper" | null);
+            next.add("tempo");
+            newSavedValues["tempo"] = d.tempo;
+          }
+          return next;
+        });
+        if (Object.keys(newSavedValues).length > 0) {
+          setAutoFillValues((prev) => ({ ...prev, ...newSavedValues }));
+        }
+        if (d.instrumentHints && d.instrumentHints.length > 0 && selectedInstruments.length === 0) {
+          const knownHints = d.instrumentHints.filter((h: string) => INSTRUMENT_TAGS.includes(h)).slice(0, MAX_INSTRUMENTS);
+          if (knownHints.length > 0) {
+            setSelectedInstruments(knownHints);
+            setAutoFilledFields((prev) => { const next = new Set(prev); next.add("instruments"); return next; });
+            setAutoFillValues((prev) => ({ ...prev, instruments: knownHints.join(",") }));
+          }
+        }
+        if (d.languageGenreHint && selectedGenres.length === 0) {
+          setSelectedGenres([d.languageGenreHint]);
+          setAutoFilledFields((prev) => { const next = new Set(prev); next.add("genres"); return next; });
+          setAutoFillValues((prev) => ({ ...prev, genres: d.languageGenreHint! }));
+        }
       }
-    );
+      if (data.artist && (selectedGenres.length > 0 || era !== "auto" || energyLevel !== "auto")) {
+        saveArtistStyle(data.artist, {
+          genres: selectedGenres.length > 0 ? selectedGenres : undefined,
+          era: era !== "auto" ? era : undefined,
+          energy: energyLevel !== "auto" ? energyLevel : undefined,
+          tempo: tempo ?? undefined,
+          moods: selectedMoods.length > 0 ? selectedMoods : undefined,
+          instruments: selectedInstruments.length > 0 ? selectedInstruments : undefined,
+        });
+      }
+      clearApiFailure();
+    };
+
+    const handleError = (err: unknown) => {
+      reportApiFailure();
+      setApiError((err as { data?: { error?: string }; message?: string })?.data?.error ?? (err as Error)?.message ?? "Something went wrong");
+    };
+
+    // Stream stage progress via SSE for live feedback (falls back to the plain JSON mutation
+    // if the stream can't be read at all, e.g. no ReadableStream support).
+    setIsMainGenerating(true);
+    setGenerationStage(null);
+    try {
+      const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const resp = await fetch(`${apiBase}/api/generate-template/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ youtubeUrl: values.youtubeUrl, ...opts }),
+      });
+
+      if (!resp.ok || !resp.body) {
+        const text = await resp.text().catch(() => "Unknown error");
+        throw new Error(text || `Request failed (${resp.status})`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let settled = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const events = buf.split("\n\n");
+        buf = events.pop() ?? "";
+        for (const event of events) {
+          const line = event.replace(/^data: /, "").trim();
+          if (!line) continue;
+          try {
+            const msg = JSON.parse(line) as { type: string; stage?: string; template?: SunoTemplate; error?: string };
+            if (msg.type === "stage" && msg.stage) {
+              setGenerationStage(msg.stage);
+            } else if (msg.type === "done" && msg.template) {
+              settled = true;
+              handleSuccess(msg.template);
+            } else if (msg.type === "error") {
+              settled = true;
+              handleError(new Error(msg.error ?? "Generation failed"));
+            }
+          } catch {}
+        }
+      }
+
+      if (!settled) {
+        throw new Error("Generation stream ended without a result");
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setIsMainGenerating(false);
+      setGenerationStage(null);
+    }
   };
 
   const handleGenerateVariations = () => {
@@ -1666,7 +1721,7 @@ export default function Home() {
     setCurrentTemplate((prev: SunoTemplate | null) => prev ? { ...prev, ...patches } : prev);
   };
 
-  const isLoading = mainMutation.isPending && !regeneratingSection && !isGeneratingVariations;
+  const isLoading = (mainMutation.isPending || isMainGenerating) && !regeneratingSection && !isGeneratingVariations;
 
   const styleActiveCount = [
     vocalGender !== "auto",
@@ -2882,7 +2937,7 @@ export default function Home() {
               exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
               className="w-full flex justify-center py-12"
             >
-              <LoadingEq />
+              <LoadingEq stage={generationStage} />
             </motion.div>
           ) : batchTracks && batchTracks.length > 0 ? (
             <motion.div
