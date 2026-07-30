@@ -49,6 +49,7 @@ import type { SunoTemplate, LyricsStructure, SuggestedDefaults } from "@workspac
 import { useVariationWorkshop } from "@/hooks/useVariationWorkshop";
 import { useBatchMode } from "@/hooks/useBatchMode";
 import { useHistoryPanel, type HistoryEntry } from "@/hooks/useHistoryPanel";
+import { useSuggestions, type SuggestedControls } from "@/hooks/useSuggestions";
 import { lazy, Suspense } from "react";
 import { TemplateResult } from "@/components/TemplateResult";
 import { LyricsStructurePanel, type ConfirmedSection } from "@/components/LyricsStructurePanel";
@@ -338,21 +339,6 @@ interface VideoPreview {
   duration: string | null;
 }
 
-interface SuggestedControls {
-  genres: string[];
-  era: string | null;
-  energy: string | null;
-  tempo: string | null;
-  vocals: string | null;
-  moods: string[];
-  instruments: string[];
-  voices: string[];
-  nudge: string | null;
-  songTitle: string;
-  artist: string;
-  mbTags: string[];
-}
-
 interface SharedState {
   youtubeUrl: string;
   template: SunoTemplate;
@@ -516,42 +502,17 @@ export default function Home() {
   const [shareToast, setShareToast] = useState<"idle" | "copied">("idle");
   const [clipboardToast, setClipboardToast] = useState(false);
 
-  const [suggestions, setSuggestions] = useState<SuggestedControls | null>(null);
-  const [suggestLoading, setSuggestLoading] = useState(false);
-  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
-  const [autoFillValues, setAutoFillValues] = useState<Record<string, string>>({});
-  const [lyricsStructure, setLyricsStructure] = useState<LyricsStructure | null>(null);
-  const [confirmedStructure, setConfirmedStructure] = useState<ConfirmedSection[] | null>(null);
-  const [suggestedDefaults, setSuggestedDefaults] = useState<SuggestedDefaults | null>(null);
-
-  /**
-   * When structure is locked (confirmedStructure set), display the confirmed sections
-   * instead of the freshly-analyzed lyricsStructure to prevent UI/payload divergence.
-   */
-  const displayStructure = useMemo<LyricsStructure | null>(() => {
-    if (!lyricsStructure) return null;
-    if (!confirmedStructure) return lyricsStructure;
-    const remapped = confirmedStructure.map((cs, i) => {
-      const original = lyricsStructure.sections[i];
-      return {
-        label: cs.label,
-        lines: cs.lines,
-        rhymeScheme: original?.rhymeScheme ?? "",
-        sentiment: original?.sentiment ?? 0,
-        isHook: original?.isHook ?? false,
-        repetitionKey: original?.repetitionKey ?? "",
-      };
-    });
-    return {
-      ...lyricsStructure,
-      sections: remapped,
-      totalSections: remapped.length,
-    };
-  }, [lyricsStructure, confirmedStructure]);
-
-  const clearAutoFill = (field: string) => {
-    setAutoFilledFields((prev) => { const next = new Set(prev); next.delete(field); return next; });
-  };
+  const {
+    suggestions, setSuggestions,
+    suggestLoading, setSuggestLoading,
+    autoFilledFields, setAutoFilledFields,
+    autoFillValues, setAutoFillValues,
+    lyricsStructure, setLyricsStructure,
+    confirmedStructure, setConfirmedStructure,
+    suggestedDefaults, setSuggestedDefaults,
+    clearAutoFill,
+    displayStructure,
+  } = useSuggestions();
 
   const resetAutoFill = (field: string) => {
     const val = autoFillValues[field];
