@@ -16,6 +16,7 @@ import { fetchDeezerMetadata } from "../lib/deezer.js";
 import { fuseMetadata, type FusedMetadata } from "../lib/metadataFusion.js";
 import { retryFetch } from "../lib/retryFetch.js";
 import { trackUsage } from "../lib/costTracker.js";
+import { computeFeedbackContext } from "../lib/historyStore.js";
 
 const AI_MODEL      = process.env.AI_MODEL      ?? "gpt-4o";
 const AI_MINI_MODEL = process.env.AI_MINI_MODEL ?? "gpt-4.1-mini";
@@ -1224,7 +1225,11 @@ async function generateOneTemplate(
 
   const context = buildPromptContext(metadata);
   const effectiveVocalGender = isInstrumental ? "no vocals" : vocalGender;
-  const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, tempo, excludeTags, variationIndex, feedbackContext });
+  // Computed server-side from the full rating history (works across devices, can't be spoofed
+  // by a client) — the client-supplied feedbackContext field is accepted for API compatibility
+  // but no longer trusted for biasing the prompt.
+  const serverFeedbackContext = computeFeedbackContext();
+  const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext ?? feedbackContext });
 
   const lyricsInstruction =
     metadata.lyricsSource === "user-override"

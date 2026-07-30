@@ -210,6 +210,62 @@ export function updateCollection(id: string, collection: string | null): void {
   ).run(collection, id);
 }
 
+// ── Feedback context ────────────────────────────────────────────────────────────
+// Derives a "lean toward liked, avoid disliked" hint from past star ratings, so the
+// AI prompt is biased by real usage history rather than a client-supplied string.
+
+interface UsedOptionsShape {
+  genres?: string[];
+  moods?: string[];
+  instruments?: string[];
+}
+
+function countValues(entries: HistoryEntry[], field: keyof UsedOptionsShape): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const entry of entries) {
+    const opts = entry.usedOptions as UsedOptionsShape | undefined;
+    const values = opts?.[field];
+    if (!values) continue;
+    for (const v of values) map.set(v, (map.get(v) ?? 0) + 1);
+  }
+  return map;
+}
+
+function topN(map: Map<string, number>, n = 4): string[] {
+  return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k);
+}
+
+function describeGroup(entries: HistoryEntry[]): string | null {
+  const segments: string[] = [];
+  const g = topN(countValues(entries, "genres"));
+  const m = topN(countValues(entries, "moods"));
+  const inst = topN(countValues(entries, "instruments"));
+  if (g.length) segments.push(`genres: ${g.join(", ")}`);
+  if (m.length) segments.push(`moods: ${m.join(", ")}`);
+  if (inst.length) segments.push(`instruments: ${inst.join(", ")}`);
+  return segments.length > 0 ? segments.join("; ") : null;
+}
+
+/** Computes the same style of feedback hint the frontend used to build client-side, but from the
+ * full server-side rating history (works across devices, can't be spoofed by a client). */
+export function computeFeedbackContext(limit = 200): string | undefined {
+  const rows = listStmt.all(limit) as RawRow[];
+  const rated = rows.map(rowToEntry).filter((e) => typeof e.rating === "number");
+  if (rated.length < 2) return undefined;
+
+  const liked = rated.filter((e) => (e.rating ?? 0) >= 4);
+  const disliked = rated.filter((e) => (e.rating ?? 0) <= 2);
+
+  const parts: string[] = [];
+  const likedDesc = liked.length > 0 ? describeGroup(liked) : null;
+  if (likedDesc) parts.push(`LIKED (lean toward these): ${likedDesc}`);
+  const dislikedDesc = disliked.length > 0 ? describeGroup(disliked) : null;
+  if (dislikedDesc) parts.push(`DISLIKED (avoid or deprioritise these): ${dislikedDesc}`);
+
+  if (parts.length === 0) return undefined;
+  return `User star ratings (1–5 scale; ≥4 = liked, ≤2 = disliked) from ${rated.length} past templates — ${parts.join(". ")}.`;
+}
+
 // ── Rating ────────────────────────────────────────────────────────────────────
 
 export function updateRating(id: string, rating: number | null): void {
