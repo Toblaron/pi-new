@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { usePWA } from "@/hooks/usePWA";
-import logoTrackTemplate from "@assets/logotracktemplateBilde-sharpen-denoise-text-lighting-remove-u_1774346189019.jpeg";
+import logoTrackTemplate from "@assets/track-template-logo.webp";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
