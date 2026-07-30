@@ -19,10 +19,12 @@ import {
   RotateCcw,
   Pencil,
   Guitar,
+  Minimize2,
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { SunoTemplate } from "@workspace/api-client-react";
 import { ANTI_CLICHE_WORDS, detectConflicts } from "@/lib/promptScorer";
+import { buildCompactStyle } from "@/lib/compactStyle";
 import { cn } from "@/lib/utils";
 
 function detectAntiCliches(text: string): string[] {
@@ -204,6 +206,8 @@ export function TemplateResult({
   const [validatorExpanded, setValidatorExpanded] = useState(false);
   const [openSunoCopied, setOpenSunoCopied] = useState(false);
 
+  const [showCompactStyle, setShowCompactStyle] = useState(false);
+  const [compactStyleCopied, setCompactStyleCopied] = useState(false);
   const [editedStyle, setEditedStyle] = useState(template.styleOfMusic ?? "");
   const [editedLyrics, setEditedLyrics] = useState(template.lyrics ?? "");
   const [editedNeg, setEditedNeg] = useState(template.negativePrompt ?? "");
@@ -462,6 +466,20 @@ export function TemplateResult({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowCompactStyle((v) => !v)}
+                title="Condense to a short ≤200-char tag list (era, genre, BPM, key, vocal identity) for older Suno versions or other tools — pure text transformation, no AI call"
+                className={cn(
+                  "flex items-center gap-1 px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider border transition-all",
+                  showCompactStyle
+                    ? "border-primary/50 text-primary bg-primary/10"
+                    : "border-transparent text-zinc-600 hover:text-zinc-400"
+                )}
+              >
+                <Minimize2 className="w-3 h-3" />
+                Compact
+              </button>
               <RegenerateButton onClick={() => onRegenerateSection("styleOfMusic")} isRegenerating={regeneratingSection === "styleOfMusic"} />
               <CopyButton onClick={() => copy(editedStyle, "Style copied!")} />
             </div>
@@ -471,6 +489,29 @@ export function TemplateResult({
             <div className="flex items-center gap-2 py-4 text-zinc-600">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
               <span className="font-mono text-[11px] text-primary/50">Regenerating...</span>
+            </div>
+          ) : showCompactStyle ? (
+            <div className="flex flex-col gap-2">
+              <p className="font-mono text-xs text-zinc-300 leading-relaxed bg-background/50 border border-primary/10 p-2.5">
+                {buildCompactStyle(editedStyle)}
+              </p>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] text-zinc-600">
+                  {buildCompactStyle(editedStyle).length} / 200 · for older Suno versions or other tools
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    copy(buildCompactStyle(editedStyle), "Compact style copied!");
+                    setCompactStyleCopied(true);
+                    setTimeout(() => setCompactStyleCopied(false), 2000);
+                  }}
+                  className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-primary/70 hover:text-primary transition-colors"
+                >
+                  {compactStyleCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  {compactStyleCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
             </div>
           ) : (
             <EditableField
