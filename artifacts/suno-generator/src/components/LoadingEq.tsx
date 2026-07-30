@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 
 const STAGE_LABELS: Record<string, string> = {
   metadata: "Fetching metadata",
+  "dsp-analysis": "Analyzing real audio — tempo, key, instruments (~15s, first time only)",
   lyrics: "Fetching lyrics",
   "ai-generating": "Generating with AI",
   validating: "Validating output",

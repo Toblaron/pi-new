@@ -810,7 +810,7 @@ interface GenerateInput {
 
 type AiOutput = { styleOfMusic: string; title: string; lyrics: string; negativePrompt: string };
 
-type GenerationStage = "metadata" | "lyrics" | "ai-generating" | "validating" | "done";
+type GenerationStage = "metadata" | "dsp-analysis" | "lyrics" | "ai-generating" | "validating" | "done";
 
 async function generateOneTemplate(
   data: GenerateInput,
@@ -869,6 +869,7 @@ async function generateOneTemplate(
     } else {
       let dspFeatures: AudioFeatures | undefined;
       if (checkDspAnalysisAvailable()) {
+        onStage?.("dsp-analysis");
         let audioPath: string | null = null;
         try {
           audioPath = await downloadAudioSample(youtubeUrl);
