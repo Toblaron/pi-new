@@ -17,7 +17,15 @@ export async function fetchMusicBrainzData(
     const query = artist.trim()
       ? `recording:"${title}" AND artist:"${artist}"`
       : `recording:"${title}"`;
-    const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=5&inc=releases+genres+isrcs`;
+    // limit=25, not 5: for songs with many re-releases/remasters (compilations, anniversary
+    // reissues, etc. all sharing the same title+artist and MusicBrainz's max relevance score),
+    // the true original is often not in the first 5 results — MusicBrainz's default ordering is
+    // relevance, not date. Verified empirically: a-ha's "Take On Me" (1985) has 95 total
+    // matching recordings; every one of the top 5 by relevance was a 2000s-2010s re-release,
+    // causing era detection to land on "2000s" instead of "80s". See releaseYear below, which
+    // scans across all fetched recordings for this reason rather than trusting the single
+    // duration-matched "best" recording used for genres/label/album.
+    const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=25&inc=releases+genres+isrcs`;
     const resp = await retryFetch(url, {
       headers: {
         "User-Agent": "SunoTemplateGenerator/1.0 (suno-template-gen@example.com)",
@@ -56,7 +64,18 @@ export async function fetchMusicBrainzData(
 
     const releases = best.releases ?? [];
     const dates = releases.map((r) => r.date).filter(Boolean).sort() as string[];
-    const releaseYear = dates[0]?.slice(0, 4);
+
+    // Original release year: earliest date across ALL fetched recordings' releases, not just
+    // the duration-matched "best" one — a remaster/re-issue can duration-match closely while
+    // still being decades newer than the true original. This is specifically about dating the
+    // song, so it's decoupled from the "best" recording used for genres/label/album/isrc below.
+    const allDates = data.recordings
+      .flatMap((r) => r.releases ?? [])
+      .map((r) => r.date)
+      .filter(Boolean)
+      .sort() as string[];
+    const releaseYear = allDates[0]?.slice(0, 4);
+
     const genres = (best.genres ?? [])
       .sort((a, b) => b.count - a.count)
       .slice(0, 6)
