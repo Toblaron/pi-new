@@ -801,7 +801,7 @@ export default function Home() {
             setShowStyleControls(true);
             setTimeout(() => setArtistMemoryBanner(null), 5000);
           }
-          fetchSuggestionsForSong(title, artist, id);
+          fetchSuggestionsForSong(title, artist, id, url);
           // Pre-generate structure analysis in background (non-blocking)
           const apiBase = import.meta.env.BASE_URL.replace(/\/$/, "");
           const targetId = extractVideoId(url);
@@ -835,11 +835,14 @@ export default function Home() {
     if (id === lastVideoIdRef.current) setPreviewLoading(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchSuggestionsForSong = useCallback(async (title: string, artist: string, targetId: string) => {
+  const fetchSuggestionsForSong = useCallback(async (title: string, artist: string, targetId: string, youtubeUrl?: string) => {
     setSuggestLoading(true);
     setShowStyleControls(true);
     try {
       const params = new URLSearchParams({ title, artist });
+      // If this video already has real DSP measurements cached from a prior generation, /suggest
+      // uses them instead of guessing — never triggers new analysis, stays fast either way.
+      if (youtubeUrl) params.set("youtubeUrl", youtubeUrl);
       const resp = await fetch(`/api/suggest?${params.toString()}`, {
         signal: AbortSignal.timeout(12000),
       });

@@ -5,6 +5,7 @@ import ytdl from "@distube/ytdl-core";
 import { detectAudioFeatures, dspResultToAudioFeatures, type AudioFeatures } from "../lib/audioFeatures.js";
 import { analyzeAudioDsp, checkDspAnalysisAvailable } from "../lib/dspAnalysis.js";
 import { decodeHtmlEntities } from "../lib/htmlEntities.js";
+import { mapDspInstrumentsToSuggestVocab, bpmToTempoBucket } from "../lib/dspSuggestionMapping.js";
 import { analyzeLyricsStructure } from "../lib/lyricsStructure.js";
 import { computeSuggestedDefaults } from "../lib/suggestedDefaults.js";
 import { cacheGet, cacheSet, cacheStats, hashParams, TTL } from "../lib/cache.js";
@@ -1634,10 +1635,24 @@ router.post("/batch", async (req, res) => {
 router.get("/suggest", async (req, res) => {
   const title = (req.query.title as string ?? "").trim();
   const artist = (req.query.artist as string ?? "").trim();
+  const youtubeUrl = (req.query.youtubeUrl as string ?? "").trim();
 
   if (!title) {
     res.status(400).json({ error: "title query param is required" });
     return;
+  }
+
+  // If this video already has real DSP measurements cached from a prior generation, use them
+  // instead of guessing — never triggers new analysis here, this endpoint must stay fast for
+  // the paste-preview flow. A cache miss (or estimate-only cache) just falls through to AI/genre
+  // inference below, unchanged.
+  let dspFeatures: AudioFeatures | undefined;
+  if (youtubeUrl) {
+    const vid = videoIdFromUrl(youtubeUrl);
+    if (vid) {
+      const cached = cacheGet<CachedAudioFeatures>(`features:${vid}`);
+      if (cached?.features?.source === "dsp-measured") dspFeatures = cached.features;
+    }
   }
 
   // Build enums here so both the JSON schema and validators stay in sync.
@@ -1756,11 +1771,12 @@ router.get("/suggest", async (req, res) => {
     const aiEra = typeof aiSuggestion.era === "string" && VALID_ERAS.has(aiSuggestion.era) ? aiSuggestion.era : null;
     const era = mbEra ?? aiEra ?? "modern";
 
-    // ── ENERGY / TEMPO: AI → inferred from genres → safe default ──
+    // ── ENERGY / TEMPO: real DSP measurement (if cached) → AI → inferred from genres → default ──
     const aiEnergy = typeof aiSuggestion.energy === "string" && VALID_ENERGIES.has(aiSuggestion.energy) ? aiSuggestion.energy : null;
     const aiTempo = typeof aiSuggestion.tempo === "string" && VALID_TEMPOS.has(aiSuggestion.tempo) ? aiSuggestion.tempo : null;
+    const dspTempo = dspFeatures ? bpmToTempoBucket(dspFeatures.bpm) : null;
     const energy = aiEnergy ?? inferEnergy(genres) ?? "medium";
-    const tempo = aiTempo ?? inferTempo(genres) ?? "mid";
+    const tempo = dspTempo ?? aiTempo ?? inferTempo(genres) ?? "mid";
 
     // ── VOCALS: AI (excluding "auto") → inferred from genres → "mixed" ──
     const aiVocals = typeof aiSuggestion.vocals === "string" && VALID_VOCALS.has(aiSuggestion.vocals) && aiSuggestion.vocals !== "auto"
@@ -1779,13 +1795,14 @@ router.get("/suggest", async (req, res) => {
       if (moods.length >= 4) break;
     }
 
-    // ── INSTRUMENTS: AI valid items → genre-inferred fill → defaults; exactly 5 ──
+    // ── INSTRUMENTS: real DSP detections (if cached) → AI valid items → genre-inferred fill → defaults; exactly 5 ──
+    const dspInstruments = dspFeatures?.instruments ? mapDspInstrumentsToSuggestVocab(dspFeatures.instruments, INSTRUMENT_LIST) : [];
     const aiInstruments = (aiSuggestion.instruments ?? [])
       .filter((i): i is string => typeof i === "string" && VALID_INSTRUMENTS.has(i));
     const instFill = inferInstruments(genres);
     const seenI = new Set<string>();
     const instruments: string[] = [];
-    for (const i of [...aiInstruments, ...instFill, ...DEFAULT_INSTRUMENTS]) {
+    for (const i of [...dspInstruments, ...aiInstruments, ...instFill, ...DEFAULT_INSTRUMENTS]) {
       if (!seenI.has(i) && VALID_INSTRUMENTS.has(i)) { instruments.push(i); seenI.add(i); }
       if (instruments.length >= 5) break;
     }
@@ -1813,7 +1830,7 @@ router.get("/suggest", async (req, res) => {
       : null;
     const nudge = aiNudge ?? inferNudge(genres, energy, tempo);
 
-    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] voices:[${voices.join(",")}] nudge:"${nudge}" (aiOk=${Object.keys(aiSuggestion).length > 0})`);
+    console.log(`[suggest] ${artist} – ${title} → genres:[${genres.join(",")}] era:${era} energy:${energy} tempo:${tempo} vocals:${vocals} moods:[${moods.join(",")}] instruments:[${instruments.join(",")}] voices:[${voices.join(",")}] nudge:"${nudge}" (aiOk=${Object.keys(aiSuggestion).length > 0}${dspFeatures ? ", dsp-measured data used" : ""})`);
 
     res.json({ genres, era, energy, tempo, vocals, moods, instruments, voices, nudge, songTitle: title, artist, mbTags });
   } catch (err) {
