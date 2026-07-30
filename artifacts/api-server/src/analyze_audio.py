@@ -39,8 +39,26 @@ import json
 import subprocess
 import tempfile
 import os
+import shutil
+import signal
 
 import numpy as np
+
+# Node kills this process with SIGTERM when the analysis timeout (dspAnalysis.ts)
+# elapses. Python's default SIGTERM disposition is immediate termination — it does
+# NOT run `with` block __exit__ cleanup or atexit handlers — so without this,
+# every timed-out analysis leaks its resampled-audio temp directory in the OS temp
+# dir. This handler makes a best-effort cleanup before exiting.
+_active_tmp_dir: str | None = None
+
+
+def _cleanup_and_exit(signum, _frame):
+    if _active_tmp_dir:
+        shutil.rmtree(_active_tmp_dir, ignore_errors=True)
+    sys.exit(1)
+
+
+signal.signal(signal.SIGTERM, _cleanup_and_exit)
 
 # ── Key detection: Krumhansl-Kessler key profiles ────────────────────────────
 _MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
@@ -169,7 +187,10 @@ def _detect_instruments(wav16k_path: str, model_path: str, class_map_path: str) 
 def analyze(audio_path: str, model_path: str, class_map_path: str) -> dict:
     import librosa
 
-    with tempfile.TemporaryDirectory() as tmp:
+    global _active_tmp_dir
+    tmp = tempfile.mkdtemp()
+    _active_tmp_dir = tmp
+    try:
         wav22k = os.path.join(tmp, "audio22k.wav")
         wav16k = os.path.join(tmp, "audio16k.wav")
 
@@ -189,6 +210,9 @@ def analyze(audio_path: str, model_path: str, class_map_path: str) -> dict:
         dominant_chords = _detect_dominant_chords(chroma, beat_frames)
 
         instruments = _detect_instruments(wav16k, model_path, class_map_path)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        _active_tmp_dir = None
 
     return {
         "success": True,

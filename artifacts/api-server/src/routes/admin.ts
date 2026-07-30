@@ -6,7 +6,6 @@ import { readFileSync } from "fs";
 import { timingSafeEqual } from "crypto";
 import { cacheStats, db } from "../lib/cache.js";
 import { getUsageStats } from "../lib/costTracker.js";
-import { claimNextJob } from "../lib/jobQueue.js";
 import log from "../lib/logger.js";
 
 let resolvedFilename: string;
@@ -120,8 +119,5 @@ router.get("/admin/tags/:category", adminAuth, (req: Request, res: Response) => 
   }
   res.json({ version: tagDictionary.version, category, tags: filtered });
 });
-
-// claimNextJob is imported per spec — available for use in worker integrations
-void claimNextJob;
 
 export default router;

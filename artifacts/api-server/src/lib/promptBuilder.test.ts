@@ -18,6 +18,15 @@ describe("trimStylePrompt", () => {
     const result = trimStylePrompt(text, 100);
     expect(result.length).toBe(100);
   });
+
+  it("counts emoji as one codepoint, matching Python's len() semantics", () => {
+    // 🔥 is a surrogate pair — JS .length would count it as 2, Python len() as 1.
+    const text = "🔥".repeat(100) + "," + "b".repeat(50);
+    const result = trimStylePrompt(text, 100);
+    expect(Array.from(result).length).toBeLessThanOrEqual(100);
+    // Codepoint-correct: should keep exactly 100 fire emoji before the comma boundary check kicks in.
+    expect(Array.from(result).every((c) => c === "🔥")).toBe(true);
+  });
 });
 
 describe("trimToCharLimit", () => {

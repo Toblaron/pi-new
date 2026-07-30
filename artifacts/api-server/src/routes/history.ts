@@ -188,7 +188,11 @@ router.patch("/history/:id/rating", (req, res) => {
     return;
   }
   try {
-    updateRating(id, rating ?? null);
+    const found = updateRating(id, rating ?? null);
+    if (!found) {
+      res.status(404).json({ error: "History entry not found" });
+      return;
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error("[history] rating error:", err);
@@ -209,7 +213,11 @@ router.patch("/history/:id/collection", (req, res) => {
     return;
   }
   try {
-    updateCollection(id, collection ?? null);
+    const found = updateCollection(id, collection ?? null);
+    if (!found) {
+      res.status(404).json({ error: "History entry not found" });
+      return;
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error("[history] collection error:", err);
@@ -240,8 +248,7 @@ router.delete("/history/bulk", (req, res) => {
   try {
     let deleted = 0;
     for (const id of ids as string[]) {
-      deleteEntry(id);
-      deleted++;
+      if (deleteEntry(id)) deleted++;
     }
     res.json({ deleted });
   } catch (err) {
@@ -256,7 +263,11 @@ router.delete("/history/bulk", (req, res) => {
  */
 router.delete("/history/:id", (req, res) => {
   try {
-    deleteEntry(req.params.id);
+    const found = deleteEntry(req.params.id);
+    if (!found) {
+      res.status(404).json({ error: "History entry not found" });
+      return;
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error("[history] delete error:", err);
@@ -307,14 +318,16 @@ router.post("/share", (req, res) => {
  */
 router.get("/share/:hash", (req, res) => {
   const { hash } = req.params;
-  if (!/^[0-9a-f]{8}$/.test(hash)) {
+  if (!/^[0-9a-f]{16}$/.test(hash)) {
     res.status(400).json({ error: "Invalid share hash" });
     return;
   }
   try {
     const result = getShareLink(hash);
     if (!result) {
-      res.status(404).json({ error: "Share link not found or expired" });
+      // Share links never expire (no TTL/cleanup on shared_templates) — a miss here always
+      // means the hash was never valid, not that it lapsed.
+      res.status(404).json({ error: "Share link not found" });
       return;
     }
     res.json(result);

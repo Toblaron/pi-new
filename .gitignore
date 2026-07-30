@@ -62,3 +62,4 @@ data/*.db-wal
 # DSP analysis: Python venv (~550MB, host-specific) and the YAMNet model (16MB, fetched by setup)
 artifacts/api-server/.venv-audio
 data/models/
+__pycache__/

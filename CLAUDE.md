@@ -82,7 +82,7 @@ There are currently **no automated tests** in the repo.
 │   │           ├── lastfm.ts / discogs.ts / theaudiodb.ts  # External metadata sources
 │   │           ├── acoustid.ts        # fpcalc/AcoustID fingerprinting — wired as a fallback in fetchBaseMetadata; no-ops without ACOUSTID_API_KEY (unset by default)
 │   │           ├── audioDownload.ts   # Downloads a short audio sample via the yt-dlp binary, for acoustid.ts
-│   │           ├── jobQueue.ts        # SQLite job queue — ⚠️ table + claim endpoint exist, no worker runs
+│   │           ├── jobQueue.ts        # SQLite job queue — ⚠️ table + enqueue/claim functions exist, but nothing calls enqueueJob and no HTTP route or worker consumes it; fully disconnected
 │   │           ├── costTracker.ts     # AI token usage log (usage_log table)
 │   │           ├── suggestedDefaults.ts / pythonValidator.ts / retryFetch.ts / logger.ts
 │   ├── suno-generator/          # React / Vite frontend
@@ -142,7 +142,7 @@ History & sharing (`routes/history.ts`):
 | `DELETE`| `/api/history/:id` / `/api/history` | Delete one / all |
 | `POST` | `/api/share` · `GET /api/share/:hash` | Create / resolve share links |
 
-Other: `GET /api/healthz` (health.ts); `GET /api/admin/{health,usage,backup,tags,tags/:category}` (admin.ts, Bearer `ADMIN_KEY` auth when set; also exposes job-queue claim for a future worker).
+Other: `GET /api/healthz` (health.ts); `GET /api/admin/{health,usage,backup,tags,tags/:category}` (admin.ts, Bearer `ADMIN_KEY` auth when set).
 
 Rate limits (`app.ts`, in-memory per IP): generation endpoints 20 req / 2 min; all other `/api` 120 req / min.
 
@@ -181,7 +181,7 @@ STATIC_DIR=optional               # Override prod static dir
 3. **Monolithic Files**: Backend logic concentrates in `routes/suno.ts` (~2,900 lines); frontend state in `pages/Home.tsx` (~3,400 lines). Perform surgical edits rather than refactors unless explicitly instructed.
 4. **API Spec Drift**: `openapi.yaml` covers `/healthz`, `/generate-template`, `/generate-variations`, `/playlist-info`, `/batch`, `/suno/transform`. When touching those, keep the spec in sync and run `pnpm --filter @workspace/api-spec run codegen`. Remaining endpoints (`/suggest`, `/multi-track`, `/reverse`, history/admin routes, etc.) use hand-written `fetch()` + local types in `Home.tsx` — keep both sides matching manually.
 5. **Production Bundling**: With `NODE_ENV=production`, `app.ts` serves static assets from `artifacts/suno-generator/dist/public` (esbuild CJS bundle — `import.meta.url` fallbacks matter; preserve them).
-6. **Dormant subsystems**: `lib/jobQueue.ts` (table + claim endpoint exist, no worker runs) is wired into nothing — don't assume it runs. `lib/acoustid.ts` IS wired (fallback in `fetchBaseMetadata`) but no-ops without `ACOUSTID_API_KEY` (unset by default).
+6. **Dormant subsystems**: `lib/jobQueue.ts` (table + enqueue/claim functions exist) is wired into nothing — `enqueueJob` has no callers, there's no HTTP route, and no worker runs; don't assume any of it executes. `lib/acoustid.ts` IS wired (fallback in `fetchBaseMetadata`) but no-ops without `ACOUSTID_API_KEY` (unset by default).
 7. **Python dependency**: every generation shells out to `validate_chars.py`; the server host needs `python3`.
 8. **yt-dlp dependency**: the AcoustID fallback shells out to the `yt-dlp` binary (installed system-wide at `/usr/local/bin/yt-dlp` on the deployment Pi, self-updates via `yt-dlp -U`) to pull an audio sample. `@distube/ytdl-core`'s stream-URL extraction is broken (decipher failure against YouTube's current player) — it's kept only for metadata calls (`getInfo`/`getBasicInfo`), which still work.
 9. **DSP analysis dependency**: needs `artifacts/api-server/.venv-audio` (a Python venv — `python3 -m venv .venv-audio && .venv-audio/bin/pip install -r requirements-audio.txt`) and `data/models/{yamnet.tflite,yamnet_class_map.csv}` present, plus `ffmpeg` on PATH. `checkDspAnalysisAvailable()` in `lib/dspAnalysis.ts` no-ops gracefully (falls back to the estimate chain) if any are missing — check `/api/healthz`'s `dspAnalysisAvailable` field or the startup log if audio features aren't upgrading to `dsp-measured`.

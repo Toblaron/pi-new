@@ -478,7 +478,8 @@ function buildPromptContext(metadata: VideoMetadata): string {
   const af = metadata.audioFeatures;
   if (af) {
     const sourceLabel =
-      af.source === "description" ? "from description"
+      af.source === "dsp-measured" ? "real DSP audio analysis — measured, not estimated"
+      : af.source === "description" ? "from description"
       : af.source === "getsongbpm" ? "GetSongBPM database — verified"
       : "AI music knowledge — estimated from training data";
     if (af.bpm) analysisLines.push(`BPM: ${af.bpm} (${sourceLabel}) ← USE THIS EXACT VALUE in style prompt and [BPM:] tag`);
@@ -766,10 +767,14 @@ function buildStyleControls(opts: {
     lines.push(`USER PREFERENCE — Era: ${eraMap[opts.era] ?? opts.era}. Make the style reflect this era's production aesthetics.`);
   }
   if (opts.genreNudge && opts.genreNudge.trim()) {
-    lines.push(`USER PREFERENCE — Genre/style nudge: "${opts.genreNudge.trim()}". Incorporate this into the style prompt.`);
+    // Capped at 300 chars — a style "nudge" is meant to be a short phrase, not a payload; the
+    // OpenAPI spec declares this field as an unbounded string, so nothing upstream enforces this.
+    lines.push(`USER PREFERENCE — Genre/style nudge: "${opts.genreNudge.trim().slice(0, 300)}". Incorporate this into the style prompt.`);
   }
   if (opts.excludeTags && opts.excludeTags.length > 0) {
-    lines.push(`USER EXCLUSION TAGS — The user explicitly wants to EXCLUDE these from the output. Add them prominently to Section 3 (Negative Prompt): ${opts.excludeTags.join(", ")}.`);
+    // Capped at 20 tags, 50 chars each — same rationale as genreNudge above.
+    const tags = opts.excludeTags.slice(0, 20).map((t) => t.slice(0, 50));
+    lines.push(`USER EXCLUSION TAGS — The user explicitly wants to EXCLUDE these from the output. Add them prominently to Section 3 (Negative Prompt): ${tags.join(", ")}.`);
   }
   if (opts.variationIndex && opts.variationIndex >= 2) {
     const variationAngles: Record<number, string> = {
@@ -817,7 +822,9 @@ async function generateOneTemplate(
   data: GenerateInput,
   onStage?: (stage: GenerationStage) => void,
 ): Promise<ReturnType<typeof GenerateSunoTemplateResponse.parse>> {
-  const { youtubeUrl, manualLyrics, vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, mode, tempo, excludeTags, variationIndex, feedbackContext, isInstrumental, confirmedStructure, noCache } = data;
+  // data.feedbackContext (client-supplied) is accepted for API compatibility but
+  // deliberately not destructured/used — see the comment at its call site below.
+  const { youtubeUrl, manualLyrics, vocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, mode, tempo, excludeTags, variationIndex, isInstrumental, confirmedStructure, noCache } = data;
 
   if (!isValidYouTubeUrl(youtubeUrl)) {
     throw new Error("Invalid YouTube URL. Please provide a valid youtube.com or youtu.be link.");
@@ -1025,9 +1032,12 @@ async function generateOneTemplate(
     // especially for high-fanout callers like /batch and /multi-track.
     // Server-side from the full rating history (works across devices, can't be spoofed by a
     // client) — the client-supplied feedbackContext field is accepted for API compatibility
-    // but no longer trusted for biasing the prompt.
+    // but no longer trusted for biasing the prompt. Deliberately NOT falling back to the
+    // client-supplied value when the server has none yet (e.g. fewer than 2 rated entries) —
+    // that fallback would silently reopen the unsanitized, unbounded-length client input this
+    // was meant to close off.
     const serverFeedbackContext = computeFeedbackContext();
-    const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext ?? feedbackContext });
+    const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, voices, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext });
 
     const singleCallPrompt = `You are SONIC ARCHITECT. Generate a complete SONIC ARCHITECT template for the song below. Output ONLY the delimiter blocks shown — no preamble, no commentary.
 
@@ -1254,6 +1264,18 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
         aiResult = { ...aiResult, ...pyReport.data };
         const action = trimmed && padded ? "trimmed+padded" : trimmed ? "trimmed" : "padded";
         console.log(`[py-validate] applied ${action} values to response`);
+      }
+    } else {
+      // validateWithPython() already logged the specific cause (spawn error, timeout,
+      // non-zero exit, bad JSON). It only trims-down below (never pads-up), so if the AI
+      // undershot the minimum this response silently ships under spec with no fix applied —
+      // that's a real gap, not just a degraded-but-safe fallback, so it's escalated to error
+      // level with exact counts rather than left to blend in with routine warn-level logs.
+      if (aiResult.styleOfMusic.length < 900 || aiResult.lyrics.length < 4900) {
+        console.error(
+          `[py-validate] SKIPPED and response is UNDER SPEC — style=${aiResult.styleOfMusic.length}/900min ` +
+          `lyrics=${aiResult.lyrics.length}/4900min for videoId=${videoId ?? "unknown"}`
+        );
       }
     }
   } catch { /* never block generation */ }

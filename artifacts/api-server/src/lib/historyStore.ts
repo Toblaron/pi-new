@@ -40,6 +40,11 @@ try {
   }
 }
 
+// searchEntries() filters on `collection` (WHERE collection = ?) — needs its own index or
+// every collection-filtered history/export query is a full table scan. Created after the
+// ALTER TABLE above since the column doesn't exist yet on a fresh database at CREATE TABLE time.
+db.exec(`CREATE INDEX IF NOT EXISTS idx_history_collection ON template_history (collection)`);
+
 export interface HistoryEntry {
   id: string;
   createdAt: number;
@@ -204,10 +209,11 @@ export function listCollections(): string[] {
   return rows.map((r) => r.collection);
 }
 
-export function updateCollection(id: string, collection: string | null): void {
-  db.prepare<[string | null, string]>(
+export function updateCollection(id: string, collection: string | null): boolean {
+  const info = db.prepare<[string | null, string]>(
     `UPDATE template_history SET collection = ? WHERE id = ?`
   ).run(collection, id);
+  return info.changes > 0;
 }
 
 // ── Feedback context ────────────────────────────────────────────────────────────
@@ -268,12 +274,12 @@ export function computeFeedbackContext(limit = 200): string | undefined {
 
 // ── Rating ────────────────────────────────────────────────────────────────────
 
-export function updateRating(id: string, rating: number | null): void {
-  updateRatingStmt.run(rating, id);
+export function updateRating(id: string, rating: number | null): boolean {
+  return updateRatingStmt.run(rating, id).changes > 0;
 }
 
-export function deleteEntry(id: string): void {
-  deleteStmt.run(id);
+export function deleteEntry(id: string): boolean {
+  return deleteStmt.run(id).changes > 0;
 }
 
 export function clearHistory(): void {
@@ -284,7 +290,10 @@ export function clearHistory(): void {
 
 export function saveShareLink(youtubeUrl: string | null, template: unknown): string {
   const payload = JSON.stringify({ youtubeUrl, template });
-  const hash = createHash("sha1").update(payload).digest("hex").slice(0, 8);
+  // 16 hex chars (64 bits) rather than 8 (32 bits) — these links never expire (see
+  // getShareLink/routes/history.ts) and share endpoints aren't behind an auth check, so hash
+  // length is the only thing standing between a share link and enumeration.
+  const hash = createHash("sha1").update(payload).digest("hex").slice(0, 16);
   insertShareStmt.run(hash, Date.now(), youtubeUrl, payload);
   return hash;
 }
