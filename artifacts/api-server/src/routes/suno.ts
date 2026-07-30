@@ -1257,6 +1257,7 @@ CRITICAL: Every section must contain REAL SUNG LYRIC LINES — actual words that
     suggestedDefaults: Object.keys(suggestedDefaults.sources).length > 0 ? suggestedDefaults : undefined,
     fromCache,
     fingerprint,
+    audioFeatures: audioFeatures ?? undefined,
   });
 }
 

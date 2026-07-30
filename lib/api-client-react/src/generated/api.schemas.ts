@@ -213,6 +213,37 @@ export interface SongFingerprint {
   computedAt?: number;
 }
 
+/**
+ * Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own knowledge of the song, least reliable). Not measured from real audio.
+
+ */
+export type AudioFeaturesSource =
+  (typeof AudioFeaturesSource)[keyof typeof AudioFeaturesSource];
+
+export const AudioFeaturesSource = {
+  description: "description",
+  getsongbpm: "getsongbpm",
+  "ai-knowledge": "ai-knowledge",
+} as const;
+
+export interface AudioFeatures {
+  /** Detected tempo in beats per minute */
+  bpm: number;
+  /** Detected musical key (e.g. "B-flat major", "F# minor") */
+  key: string;
+  /** Detected time signature (e.g. "4/4") */
+  timeSignature: string;
+  /** Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own knowledge of the song, least reliable). Not measured from real audio.
+   */
+  source: AudioFeaturesSource;
+  /**
+   * Confidence in the detected value, reflecting source quality — not a measurement
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+}
+
 export interface SunoTemplate {
   songTitle: string;
   artist: string;
@@ -234,6 +265,8 @@ export interface SunoTemplate {
   fromCache?: boolean;
   /** Musical DNA fingerprint with normalized 0–10 scores */
   fingerprint?: SongFingerprint;
+  /** Detected tempo, key, and time signature (not measured from real audio — see the "source" field) */
+  audioFeatures?: AudioFeatures;
 }
 
 export interface ErrorResponse {

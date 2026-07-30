@@ -149,6 +149,9 @@ export const generateSunoTemplateResponseFingerprintOneMoodValenceMax = 10;
 export const generateSunoTemplateResponseFingerprintOneGenrePurityMin = 0;
 export const generateSunoTemplateResponseFingerprintOneGenrePurityMax = 10;
 
+export const generateSunoTemplateResponseAudioFeaturesOneConfidenceMin = 0;
+export const generateSunoTemplateResponseAudioFeaturesOneConfidenceMax = 1;
+
 export const GenerateSunoTemplateResponse = zod.object({
   songTitle: zod.string(),
   artist: zod.string(),
@@ -252,6 +255,32 @@ export const GenerateSunoTemplateResponse = zod.object({
     })
     .optional()
     .describe("Musical DNA fingerprint with normalized 0–10 scores"),
+  audioFeatures: zod
+    .object({
+      bpm: zod.number().describe("Detected tempo in beats per minute"),
+      key: zod
+        .string()
+        .describe('Detected musical key (e.g. \"B-flat major\", \"F# minor\")'),
+      timeSignature: zod
+        .string()
+        .describe('Detected time signature (e.g. \"4\/4\")'),
+      source: zod
+        .enum(["description", "getsongbpm", "ai-knowledge"])
+        .describe(
+          'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), or \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable). Not measured from real audio.\n',
+        ),
+      confidence: zod
+        .number()
+        .min(generateSunoTemplateResponseAudioFeaturesOneConfidenceMin)
+        .max(generateSunoTemplateResponseAudioFeaturesOneConfidenceMax)
+        .describe(
+          "Confidence in the detected value, reflecting source quality — not a measurement",
+        ),
+    })
+    .optional()
+    .describe(
+      'Detected tempo, key, and time signature (not measured from real audio — see the \"source\" field)',
+    ),
 });
 
 /**
@@ -391,6 +420,9 @@ export const generateVariationsResponseSlotsItemTemplateOneFingerprintOneMoodVal
 export const generateVariationsResponseSlotsItemTemplateOneFingerprintOneGenrePurityMin = 0;
 export const generateVariationsResponseSlotsItemTemplateOneFingerprintOneGenrePurityMax = 10;
 
+export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneConfidenceMin = 0;
+export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneConfidenceMax = 1;
+
 export const generateVariationsResponseVariationsItemFingerprintOneEnergyMin = 0;
 export const generateVariationsResponseVariationsItemFingerprintOneEnergyMax = 10;
 
@@ -411,6 +443,9 @@ export const generateVariationsResponseVariationsItemFingerprintOneMoodValenceMa
 
 export const generateVariationsResponseVariationsItemFingerprintOneGenrePurityMin = 0;
 export const generateVariationsResponseVariationsItemFingerprintOneGenrePurityMax = 10;
+
+export const generateVariationsResponseVariationsItemAudioFeaturesOneConfidenceMin = 0;
+export const generateVariationsResponseVariationsItemAudioFeaturesOneConfidenceMax = 1;
 
 export const GenerateVariationsResponse = zod.object({
   slots: zod
@@ -558,6 +593,40 @@ export const GenerateVariationsResponse = zod.object({
               })
               .optional()
               .describe("Musical DNA fingerprint with normalized 0–10 scores"),
+            audioFeatures: zod
+              .object({
+                bpm: zod
+                  .number()
+                  .describe("Detected tempo in beats per minute"),
+                key: zod
+                  .string()
+                  .describe(
+                    'Detected musical key (e.g. \"B-flat major\", \"F# minor\")',
+                  ),
+                timeSignature: zod
+                  .string()
+                  .describe('Detected time signature (e.g. \"4\/4\")'),
+                source: zod
+                  .enum(["description", "getsongbpm", "ai-knowledge"])
+                  .describe(
+                    'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), or \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable). Not measured from real audio.\n',
+                  ),
+                confidence: zod
+                  .number()
+                  .min(
+                    generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneConfidenceMin,
+                  )
+                  .max(
+                    generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneConfidenceMax,
+                  )
+                  .describe(
+                    "Confidence in the detected value, reflecting source quality — not a measurement",
+                  ),
+              })
+              .optional()
+              .describe(
+                'Detected tempo, key, and time signature (not measured from real audio — see the \"source\" field)',
+              ),
           })
           .optional()
           .describe("The generated template, present when the slot succeeded"),
@@ -703,6 +772,38 @@ export const GenerateVariationsResponse = zod.object({
           })
           .optional()
           .describe("Musical DNA fingerprint with normalized 0–10 scores"),
+        audioFeatures: zod
+          .object({
+            bpm: zod.number().describe("Detected tempo in beats per minute"),
+            key: zod
+              .string()
+              .describe(
+                'Detected musical key (e.g. \"B-flat major\", \"F# minor\")',
+              ),
+            timeSignature: zod
+              .string()
+              .describe('Detected time signature (e.g. \"4\/4\")'),
+            source: zod
+              .enum(["description", "getsongbpm", "ai-knowledge"])
+              .describe(
+                'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), or \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable). Not measured from real audio.\n',
+              ),
+            confidence: zod
+              .number()
+              .min(
+                generateVariationsResponseVariationsItemAudioFeaturesOneConfidenceMin,
+              )
+              .max(
+                generateVariationsResponseVariationsItemAudioFeaturesOneConfidenceMax,
+              )
+              .describe(
+                "Confidence in the detected value, reflecting source quality — not a measurement",
+              ),
+          })
+          .optional()
+          .describe(
+            'Detected tempo, key, and time signature (not measured from real audio — see the \"source\" field)',
+          ),
       }),
     )
     .describe("Successful variations only (for backwards compat)"),

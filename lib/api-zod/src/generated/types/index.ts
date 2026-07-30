@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./audioFeatures";
+export * from "./audioFeaturesSource";
 export * from "./batchGenerateRequest";
 export * from "./batchGenerateRequestEnergyLevel";
 export * from "./batchGenerateRequestEra";

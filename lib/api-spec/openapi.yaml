@@ -391,6 +391,36 @@ components:
         - eraAuthenticity
         - moodValence
         - genrePurity
+    AudioFeatures:
+      type: object
+      properties:
+        bpm:
+          type: number
+          description: Detected tempo in beats per minute
+        key:
+          type: string
+          description: Detected musical key (e.g. "B-flat major", "F# minor")
+        timeSignature:
+          type: string
+          description: Detected time signature (e.g. "4/4")
+        source:
+          type: string
+          enum: [description, getsongbpm, ai-knowledge]
+          description: >
+            Where this came from — "description" (parsed from the video description),
+            "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own
+            knowledge of the song, least reliable). Not measured from real audio.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence in the detected value, reflecting source quality — not a measurement
+      required:
+        - bpm
+        - key
+        - timeSignature
+        - source
+        - confidence
     SunoTemplate:
       type: object
       properties:
@@ -430,6 +460,10 @@ components:
           allOf:
             - $ref: "#/components/schemas/SongFingerprint"
           description: Musical DNA fingerprint with normalized 0–10 scores
+        audioFeatures:
+          allOf:
+            - $ref: "#/components/schemas/AudioFeatures"
+          description: Detected tempo, key, and time signature (not measured from real audio — see the "source" field)
       required:
         - songTitle
         - artist

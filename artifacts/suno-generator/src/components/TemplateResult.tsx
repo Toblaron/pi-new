@@ -329,6 +329,15 @@ export function TemplateResult({
           <p className="flex items-center gap-1.5 mt-0.5 font-mono text-[11px] text-zinc-500">
             <Mic2 className="w-3 h-3 text-primary/40" />
             {template.artist}
+            {template.audioFeatures && (
+              <span
+                title={`Source: ${template.audioFeatures.source} (${Math.round(template.audioFeatures.confidence * 100)}% confidence) — estimated, not measured from real audio`}
+                className="flex items-center gap-1 text-zinc-600 border-l border-zinc-800 pl-1.5 ml-0.5"
+              >
+                <Music className="w-3 h-3 text-primary/40" />
+                {template.audioFeatures.key} · {Math.round(template.audioFeatures.bpm)} BPM
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">

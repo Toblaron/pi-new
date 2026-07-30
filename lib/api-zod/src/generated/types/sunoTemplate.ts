@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AudioFeatures } from "./audioFeatures";
 import type { LyricsStructure } from "./lyricsStructure";
 import type { SongFingerprint } from "./songFingerprint";
 import type { SuggestedDefaults } from "./suggestedDefaults";
@@ -30,4 +31,6 @@ export interface SunoTemplate {
   fromCache?: boolean;
   /** Musical DNA fingerprint with normalized 0–10 scores */
   fingerprint?: SongFingerprint;
+  /** Detected tempo, key, and time signature (not measured from real audio — see the "source" field) */
+  audioFeatures?: AudioFeatures;
 }
