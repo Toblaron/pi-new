@@ -5,10 +5,46 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ConfirmedStructureSection } from "./confirmedStructureSection";
+import type { GenerateTemplateRequestEnergyLevel } from "./generateTemplateRequestEnergyLevel";
+import type { GenerateTemplateRequestEra } from "./generateTemplateRequestEra";
+import type { GenerateTemplateRequestMode } from "./generateTemplateRequestMode";
+import type { GenerateTemplateRequestTempo } from "./generateTemplateRequestTempo";
+import type { GenerateTemplateRequestVocalGender } from "./generateTemplateRequestVocalGender";
 
 export interface GenerateTemplateRequest {
   /** A YouTube video URL */
   youtubeUrl: string;
+  /** Optional manually provided lyrics to use instead of fetching from APIs */
+  manualLyrics?: string;
+  /** Preferred vocal type for the style prompt */
+  vocalGender?: GenerateTemplateRequestVocalGender;
+  /** Energy level of the track */
+  energyLevel?: GenerateTemplateRequestEnergyLevel;
+  /** Target musical era or decade */
+  era?: GenerateTemplateRequestEra;
+  /** Optional genre or style override */
+  genreNudge?: string;
+  /** Selected genre tags to incorporate into the style prompt */
+  genres?: string[];
+  /** Mood/vibe tags (e.g. Dark, Nostalgic, Euphoric) */
+  moods?: string[];
+  /** Featured instrument hints (e.g. Piano, Guitar, Synth) */
+  instruments?: string[];
+  /** Generation mode — faithful cover or creative inspiration */
+  mode?: GenerateTemplateRequestMode;
+  /** Target BPM range */
+  tempo?: GenerateTemplateRequestTempo;
+  /** Tags to explicitly exclude from the negative prompt */
+  excludeTags?: string[];
+  /** Which variation to generate (1 or 2) */
+  variationIndex?: number;
+  /** Learning context derived from the user's past template ratings */
+  feedbackContext?: string;
+  /** When true, generate as a fully instrumental track — no lyrics, only structural cues */
+  isInstrumental?: boolean;
+  /** User-confirmed lyrics structure to use as a constraint in generation */
+  confirmedStructure?: ConfirmedStructureSection[];
   /** When true, bypass the template cache and always run a fresh AI generation */
   noCache?: boolean;
 }

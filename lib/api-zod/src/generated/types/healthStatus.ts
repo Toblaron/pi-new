@@ -8,4 +8,10 @@
 
 export interface HealthStatus {
   status: string;
+  /** Whether the SQLite cache/history database is reachable */
+  database?: boolean;
+  /** Whether python3 is available for field-length validation */
+  pythonValidator?: boolean;
+  /** Whether an AI provider API key is configured */
+  aiConfigured?: boolean;
 }

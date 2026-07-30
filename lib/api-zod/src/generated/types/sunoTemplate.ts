@@ -5,6 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { LyricsStructure } from "./lyricsStructure";
+import type { SongFingerprint } from "./songFingerprint";
+import type { SuggestedDefaults } from "./suggestedDefaults";
 
 export interface SunoTemplate {
   songTitle: string;
@@ -19,4 +22,12 @@ export interface SunoTemplate {
   negativePrompt: string;
   /** Additional tags for mood, instruments, tempo */
   tags: string[];
+  /** Analyzed structure of the source lyrics */
+  lyricsStructure?: LyricsStructure;
+  /** Smart defaults computed from BPM, era, and language data */
+  suggestedDefaults?: SuggestedDefaults;
+  /** True when this result was served from the server-side cache */
+  fromCache?: boolean;
+  /** Musical DNA fingerprint with normalized 0–10 scores */
+  fingerprint?: SongFingerprint;
 }
