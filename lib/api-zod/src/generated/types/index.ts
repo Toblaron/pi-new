@@ -7,6 +7,8 @@
  */
 
 export * from "./audioFeatures";
+export * from "./audioFeaturesDominantChordsItem";
+export * from "./audioFeaturesInstrumentsItem";
 export * from "./audioFeaturesSource";
 export * from "./batchGenerateRequest";
 export * from "./batchGenerateRequestEnergyLevel";

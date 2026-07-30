@@ -3,12 +3,26 @@ import { trackUsage } from "./costTracker.js";
 
 const AI_MINI_MODEL = process.env.AI_MINI_MODEL ?? "gpt-4.1-mini";
 
+export interface DominantChord {
+  chord: string;
+  weight: number;
+}
+
+export interface DetectedInstrument {
+  name: string;
+  confidence: number;
+}
+
 export interface AudioFeatures {
   bpm: number;
   key: string;
   timeSignature: string;
-  source: "description" | "getsongbpm" | "ai-knowledge";
+  source: "description" | "getsongbpm" | "ai-knowledge" | "dsp-measured";
   confidence: number;
+  /** Only present when source is "dsp-measured" — recurring harmonic centers by time-share. */
+  dominantChords?: DominantChord[];
+  /** Only present when source is "dsp-measured" — instrument tags from real audio classification. */
+  instruments?: DetectedInstrument[];
 }
 
 const KEY_ABBREV_MAP: Record<string, string> = {
@@ -144,6 +158,27 @@ async function fetchAiKnowledge(
     console.warn("[audioFeatures] AI knowledge lookup failed:", (err as Error).message?.slice(0, 80));
     return null;
   }
+}
+
+/** Converts a real DSP measurement (see dspAnalysis.ts) into the shared AudioFeatures shape. */
+export function dspResultToAudioFeatures(result: {
+  bpm: number;
+  key: string;
+  keyConfidence: number;
+  dominantChords: DominantChord[];
+  instruments: DetectedInstrument[];
+}): AudioFeatures {
+  return {
+    bpm: Math.round(result.bpm),
+    key: normalizeKey(result.key),
+    timeSignature: "4/4",
+    source: "dsp-measured",
+    // Blend key-detection confidence with a high floor for tempo (tempo tracking is far
+    // more reliable than key-finding) — this stays the highest-confidence tier regardless.
+    confidence: Math.max(0.9, result.keyConfidence),
+    dominantChords: result.dominantChords,
+    instruments: result.instruments,
+  };
 }
 
 export async function detectAudioFeatures(opts: {

@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AudioFeaturesDominantChordsItem } from "./audioFeaturesDominantChordsItem";
+import type { AudioFeaturesInstrumentsItem } from "./audioFeaturesInstrumentsItem";
 import type { AudioFeaturesSource } from "./audioFeaturesSource";
 
 export interface AudioFeatures {
@@ -14,7 +16,7 @@ export interface AudioFeatures {
   key: string;
   /** Detected time signature (e.g. "4/4") */
   timeSignature: string;
-  /** Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own knowledge of the song, least reliable). Not measured from real audio.
+  /** Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), "ai-knowledge" (the AI's own knowledge of the song, least reliable), or "dsp-measured" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only "dsp-measured" is an actual measurement; the others are text-based estimates.
    */
   source: AudioFeaturesSource;
   /**
@@ -23,4 +25,10 @@ export interface AudioFeatures {
    * @maximum 1
    */
   confidence: number;
+  /** Only present when source is "dsp-measured". The track's recurring harmonic centers by time-share — NOT a bar-by-bar chord progression (per-beat chord estimation is too noisy to present as a reliable transcription; this summarizes which chords the song spends the most time on).
+   */
+  dominantChords?: AudioFeaturesDominantChordsItem[];
+  /** Only present when source is "dsp-measured". Instrument tags from a pretrained audio classifier (YAMNet) run on the actual downloaded audio, filtered to a curated instrument subset of its label set.
+   */
+  instruments?: AudioFeaturesInstrumentsItem[];
 }

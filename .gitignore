@@ -58,3 +58,7 @@ data/*.db-wal
 
 # ytdl-core dumps these debug player scripts to cwd when it can't parse YouTube's decipher function
 **/*-player-script.js
+
+# DSP analysis: Python venv (~550MB, host-specific) and the YAMNet model (16MB, fetched by setup)
+artifacts/api-server/.venv-audio
+data/models/

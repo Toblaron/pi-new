@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { db } from "../lib/cache.js";
 import { checkPython3Available } from "../lib/startupCheck.js";
+import { checkDspAnalysisAvailable } from "../lib/dspAnalysis.js";
 
 const router: IRouter = Router();
 
@@ -22,6 +23,7 @@ router.get("/healthz", async (_req, res) => {
     database,
     pythonValidator,
     aiConfigured,
+    dspAnalysisAvailable: checkDspAnalysisAvailable(),
   });
   res.json(data);
 });

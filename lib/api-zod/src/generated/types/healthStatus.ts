@@ -14,4 +14,6 @@ export interface HealthStatus {
   pythonValidator?: boolean;
   /** Whether an AI provider API key is configured */
   aiConfigured?: boolean;
+  /** Whether the real DSP audio-analysis venv and YAMNet model are present */
+  dspAnalysisAvailable?: boolean;
 }

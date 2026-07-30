@@ -25,6 +25,12 @@ export const HealthCheckResponse = zod.object({
     .boolean()
     .optional()
     .describe("Whether an AI provider API key is configured"),
+  dspAnalysisAvailable: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether the real DSP audio-analysis venv and YAMNet model are present",
+    ),
 });
 
 /**
@@ -152,6 +158,12 @@ export const generateSunoTemplateResponseFingerprintOneGenrePurityMax = 10;
 export const generateSunoTemplateResponseAudioFeaturesOneConfidenceMin = 0;
 export const generateSunoTemplateResponseAudioFeaturesOneConfidenceMax = 1;
 
+export const generateSunoTemplateResponseAudioFeaturesOneDominantChordsItemWeightMin = 0;
+export const generateSunoTemplateResponseAudioFeaturesOneDominantChordsItemWeightMax = 1;
+
+export const generateSunoTemplateResponseAudioFeaturesOneInstrumentsItemConfidenceMin = 0;
+export const generateSunoTemplateResponseAudioFeaturesOneInstrumentsItemConfidenceMax = 1;
+
 export const GenerateSunoTemplateResponse = zod.object({
   songTitle: zod.string(),
   artist: zod.string(),
@@ -265,9 +277,9 @@ export const GenerateSunoTemplateResponse = zod.object({
         .string()
         .describe('Detected time signature (e.g. \"4\/4\")'),
       source: zod
-        .enum(["description", "getsongbpm", "ai-knowledge"])
+        .enum(["description", "getsongbpm", "ai-knowledge", "dsp-measured"])
         .describe(
-          'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), or \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable). Not measured from real audio.\n',
+          'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable), or \"dsp-measured\" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only \"dsp-measured\" is an actual measurement; the others are text-based estimates.\n',
         ),
       confidence: zod
         .number()
@@ -275,6 +287,47 @@ export const GenerateSunoTemplateResponse = zod.object({
         .max(generateSunoTemplateResponseAudioFeaturesOneConfidenceMax)
         .describe(
           "Confidence in the detected value, reflecting source quality — not a measurement",
+        ),
+      dominantChords: zod
+        .array(
+          zod.object({
+            chord: zod.string().describe('e.g. \"Cmaj\", \"F#min\"'),
+            weight: zod
+              .number()
+              .min(
+                generateSunoTemplateResponseAudioFeaturesOneDominantChordsItemWeightMin,
+              )
+              .max(
+                generateSunoTemplateResponseAudioFeaturesOneDominantChordsItemWeightMax,
+              )
+              .describe("Fraction of analyzed beats closest to this chord"),
+          }),
+        )
+        .optional()
+        .describe(
+          'Only present when source is \"dsp-measured\". The track\'s recurring harmonic centers by time-share — NOT a bar-by-bar chord progression (per-beat chord estimation is too noisy to present as a reliable transcription; this summarizes which chords the song spends the most time on).\n',
+        ),
+      instruments: zod
+        .array(
+          zod.object({
+            name: zod
+              .string()
+              .describe(
+                'e.g. \"Electric guitar\", \"Drum machine\", \"Synthesizer\"',
+              ),
+            confidence: zod
+              .number()
+              .min(
+                generateSunoTemplateResponseAudioFeaturesOneInstrumentsItemConfidenceMin,
+              )
+              .max(
+                generateSunoTemplateResponseAudioFeaturesOneInstrumentsItemConfidenceMax,
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          'Only present when source is \"dsp-measured\". Instrument tags from a pretrained audio classifier (YAMNet) run on the actual downloaded audio, filtered to a curated instrument subset of its label set.\n',
         ),
     })
     .optional()
@@ -423,6 +476,12 @@ export const generateVariationsResponseSlotsItemTemplateOneFingerprintOneGenrePu
 export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneConfidenceMin = 0;
 export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneConfidenceMax = 1;
 
+export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneDominantChordsItemWeightMin = 0;
+export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneDominantChordsItemWeightMax = 1;
+
+export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneInstrumentsItemConfidenceMin = 0;
+export const generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneInstrumentsItemConfidenceMax = 1;
+
 export const generateVariationsResponseVariationsItemFingerprintOneEnergyMin = 0;
 export const generateVariationsResponseVariationsItemFingerprintOneEnergyMax = 10;
 
@@ -446,6 +505,12 @@ export const generateVariationsResponseVariationsItemFingerprintOneGenrePurityMa
 
 export const generateVariationsResponseVariationsItemAudioFeaturesOneConfidenceMin = 0;
 export const generateVariationsResponseVariationsItemAudioFeaturesOneConfidenceMax = 1;
+
+export const generateVariationsResponseVariationsItemAudioFeaturesOneDominantChordsItemWeightMin = 0;
+export const generateVariationsResponseVariationsItemAudioFeaturesOneDominantChordsItemWeightMax = 1;
+
+export const generateVariationsResponseVariationsItemAudioFeaturesOneInstrumentsItemConfidenceMin = 0;
+export const generateVariationsResponseVariationsItemAudioFeaturesOneInstrumentsItemConfidenceMax = 1;
 
 export const GenerateVariationsResponse = zod.object({
   slots: zod
@@ -607,9 +672,14 @@ export const GenerateVariationsResponse = zod.object({
                   .string()
                   .describe('Detected time signature (e.g. \"4\/4\")'),
                 source: zod
-                  .enum(["description", "getsongbpm", "ai-knowledge"])
+                  .enum([
+                    "description",
+                    "getsongbpm",
+                    "ai-knowledge",
+                    "dsp-measured",
+                  ])
                   .describe(
-                    'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), or \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable). Not measured from real audio.\n',
+                    'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable), or \"dsp-measured\" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only \"dsp-measured\" is an actual measurement; the others are text-based estimates.\n',
                   ),
                 confidence: zod
                   .number()
@@ -621,6 +691,49 @@ export const GenerateVariationsResponse = zod.object({
                   )
                   .describe(
                     "Confidence in the detected value, reflecting source quality — not a measurement",
+                  ),
+                dominantChords: zod
+                  .array(
+                    zod.object({
+                      chord: zod.string().describe('e.g. \"Cmaj\", \"F#min\"'),
+                      weight: zod
+                        .number()
+                        .min(
+                          generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneDominantChordsItemWeightMin,
+                        )
+                        .max(
+                          generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneDominantChordsItemWeightMax,
+                        )
+                        .describe(
+                          "Fraction of analyzed beats closest to this chord",
+                        ),
+                    }),
+                  )
+                  .optional()
+                  .describe(
+                    'Only present when source is \"dsp-measured\". The track\'s recurring harmonic centers by time-share — NOT a bar-by-bar chord progression (per-beat chord estimation is too noisy to present as a reliable transcription; this summarizes which chords the song spends the most time on).\n',
+                  ),
+                instruments: zod
+                  .array(
+                    zod.object({
+                      name: zod
+                        .string()
+                        .describe(
+                          'e.g. \"Electric guitar\", \"Drum machine\", \"Synthesizer\"',
+                        ),
+                      confidence: zod
+                        .number()
+                        .min(
+                          generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneInstrumentsItemConfidenceMin,
+                        )
+                        .max(
+                          generateVariationsResponseSlotsItemTemplateOneAudioFeaturesOneInstrumentsItemConfidenceMax,
+                        ),
+                    }),
+                  )
+                  .optional()
+                  .describe(
+                    'Only present when source is \"dsp-measured\". Instrument tags from a pretrained audio classifier (YAMNet) run on the actual downloaded audio, filtered to a curated instrument subset of its label set.\n',
                   ),
               })
               .optional()
@@ -784,9 +897,14 @@ export const GenerateVariationsResponse = zod.object({
               .string()
               .describe('Detected time signature (e.g. \"4\/4\")'),
             source: zod
-              .enum(["description", "getsongbpm", "ai-knowledge"])
+              .enum([
+                "description",
+                "getsongbpm",
+                "ai-knowledge",
+                "dsp-measured",
+              ])
               .describe(
-                'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), or \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable). Not measured from real audio.\n',
+                'Where this came from — \"description\" (parsed from the video description), \"getsongbpm\" (GetSongBPM API lookup), \"ai-knowledge\" (the AI\'s own knowledge of the song, least reliable), or \"dsp-measured\" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only \"dsp-measured\" is an actual measurement; the others are text-based estimates.\n',
               ),
             confidence: zod
               .number()
@@ -798,6 +916,49 @@ export const GenerateVariationsResponse = zod.object({
               )
               .describe(
                 "Confidence in the detected value, reflecting source quality — not a measurement",
+              ),
+            dominantChords: zod
+              .array(
+                zod.object({
+                  chord: zod.string().describe('e.g. \"Cmaj\", \"F#min\"'),
+                  weight: zod
+                    .number()
+                    .min(
+                      generateVariationsResponseVariationsItemAudioFeaturesOneDominantChordsItemWeightMin,
+                    )
+                    .max(
+                      generateVariationsResponseVariationsItemAudioFeaturesOneDominantChordsItemWeightMax,
+                    )
+                    .describe(
+                      "Fraction of analyzed beats closest to this chord",
+                    ),
+                }),
+              )
+              .optional()
+              .describe(
+                'Only present when source is \"dsp-measured\". The track\'s recurring harmonic centers by time-share — NOT a bar-by-bar chord progression (per-beat chord estimation is too noisy to present as a reliable transcription; this summarizes which chords the song spends the most time on).\n',
+              ),
+            instruments: zod
+              .array(
+                zod.object({
+                  name: zod
+                    .string()
+                    .describe(
+                      'e.g. \"Electric guitar\", \"Drum machine\", \"Synthesizer\"',
+                    ),
+                  confidence: zod
+                    .number()
+                    .min(
+                      generateVariationsResponseVariationsItemAudioFeaturesOneInstrumentsItemConfidenceMin,
+                    )
+                    .max(
+                      generateVariationsResponseVariationsItemAudioFeaturesOneInstrumentsItemConfidenceMax,
+                    ),
+                }),
+              )
+              .optional()
+              .describe(
+                'Only present when source is \"dsp-measured\". Instrument tags from a pretrained audio classifier (YAMNet) run on the actual downloaded audio, filtered to a curated instrument subset of its label set.\n',
               ),
           })
           .optional()

@@ -13,6 +13,8 @@ export interface HealthStatus {
   pythonValidator?: boolean;
   /** Whether an AI provider API key is configured */
   aiConfigured?: boolean;
+  /** Whether the real DSP audio-analysis venv and YAMNet model are present */
+  dspAnalysisAvailable?: boolean;
 }
 
 export interface ConfirmedStructureSection {
@@ -214,7 +216,7 @@ export interface SongFingerprint {
 }
 
 /**
- * Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own knowledge of the song, least reliable). Not measured from real audio.
+ * Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), "ai-knowledge" (the AI's own knowledge of the song, least reliable), or "dsp-measured" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only "dsp-measured" is an actual measurement; the others are text-based estimates.
 
  */
 export type AudioFeaturesSource =
@@ -224,7 +226,29 @@ export const AudioFeaturesSource = {
   description: "description",
   getsongbpm: "getsongbpm",
   "ai-knowledge": "ai-knowledge",
+  "dsp-measured": "dsp-measured",
 } as const;
+
+export type AudioFeaturesDominantChordsItem = {
+  /** e.g. "Cmaj", "F#min" */
+  chord: string;
+  /**
+   * Fraction of analyzed beats closest to this chord
+   * @minimum 0
+   * @maximum 1
+   */
+  weight: number;
+};
+
+export type AudioFeaturesInstrumentsItem = {
+  /** e.g. "Electric guitar", "Drum machine", "Synthesizer" */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+};
 
 export interface AudioFeatures {
   /** Detected tempo in beats per minute */
@@ -233,7 +257,7 @@ export interface AudioFeatures {
   key: string;
   /** Detected time signature (e.g. "4/4") */
   timeSignature: string;
-  /** Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own knowledge of the song, least reliable). Not measured from real audio.
+  /** Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), "ai-knowledge" (the AI's own knowledge of the song, least reliable), or "dsp-measured" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only "dsp-measured" is an actual measurement; the others are text-based estimates.
    */
   source: AudioFeaturesSource;
   /**
@@ -242,6 +266,12 @@ export interface AudioFeatures {
    * @maximum 1
    */
   confidence: number;
+  /** Only present when source is "dsp-measured". The track's recurring harmonic centers by time-share — NOT a bar-by-bar chord progression (per-beat chord estimation is too noisy to present as a reliable transcription; this summarizes which chords the song spends the most time on).
+   */
+  dominantChords?: AudioFeaturesDominantChordsItem[];
+  /** Only present when source is "dsp-measured". Instrument tags from a pretrained audio classifier (YAMNet) run on the actual downloaded audio, filtered to a curated instrument subset of its label set.
+   */
+  instruments?: AudioFeaturesInstrumentsItem[];
 }
 
 export interface SunoTemplate {

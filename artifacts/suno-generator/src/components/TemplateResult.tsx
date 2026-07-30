@@ -18,6 +18,7 @@ import {
   ChevronUp,
   RotateCcw,
   Pencil,
+  Guitar,
 } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { SunoTemplate } from "@workspace/api-client-react";
@@ -331,14 +332,47 @@ export function TemplateResult({
             {template.artist}
             {template.audioFeatures && (
               <span
-                title={`Source: ${template.audioFeatures.source} (${Math.round(template.audioFeatures.confidence * 100)}% confidence) — estimated, not measured from real audio`}
-                className="flex items-center gap-1 text-zinc-600 border-l border-zinc-800 pl-1.5 ml-0.5"
+                title={
+                  template.audioFeatures.source === "dsp-measured"
+                    ? `Measured from real audio via DSP analysis (tempo tracking + chroma-based key detection, ${Math.round(template.audioFeatures.confidence * 100)}% confidence)`
+                    : `Source: ${template.audioFeatures.source} (${Math.round(template.audioFeatures.confidence * 100)}% confidence) — estimated, not measured from real audio`
+                }
+                className={cn(
+                  "flex items-center gap-1 border-l pl-1.5 ml-0.5",
+                  template.audioFeatures.source === "dsp-measured"
+                    ? "text-primary/70 border-primary/30"
+                    : "text-zinc-600 border-zinc-800"
+                )}
               >
                 <Music className="w-3 h-3 text-primary/40" />
                 {template.audioFeatures.key} · {Math.round(template.audioFeatures.bpm)} BPM
+                {template.audioFeatures.source === "dsp-measured" && (
+                  <span className="text-primary/50 normal-case">measured</span>
+                )}
               </span>
             )}
           </p>
+          {template.audioFeatures?.source === "dsp-measured" &&
+            ((template.audioFeatures.instruments?.length ?? 0) > 0 || (template.audioFeatures.dominantChords?.length ?? 0) > 0) && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 font-mono text-[10px] text-zinc-600">
+                {(template.audioFeatures.instruments?.length ?? 0) > 0 && (
+                  <span
+                    className="flex items-center gap-1"
+                    title="Instrument tags from a pretrained audio classifier (YAMNet) run on the actual downloaded audio"
+                  >
+                    <Guitar className="w-3 h-3 text-primary/40" />
+                    {template.audioFeatures.instruments!.slice(0, 5).map((i) => i.name).join(" · ")}
+                  </span>
+                )}
+                {(template.audioFeatures.dominantChords?.length ?? 0) > 0 && (
+                  <span
+                    title="The track's recurring harmonic centers by time-share — not a bar-by-bar chord progression"
+                  >
+                    Chords: {template.audioFeatures.dominantChords!.slice(0, 5).map((c) => c.chord).join(" · ")}
+                  </span>
+                )}
+              </p>
+            )}
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button

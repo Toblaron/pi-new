@@ -1,6 +1,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import log from "./logger.js";
+import { checkDspAnalysisAvailable } from "./dspAnalysis.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -38,6 +39,7 @@ export async function logIntegrationStatus(): Promise<void> {
     ["AcoustID (audio fingerprint fallback)", !!process.env.ACOUSTID_API_KEY],
     ["python3 (field validator)", python3],
     ["fpcalc (audio fingerprinting)", fpcalc],
+    ["DSP analysis (real tempo/key/chords/instruments)", checkDspAnalysisAvailable()],
   ];
 
   log.info("Integration status:");
@@ -46,5 +48,8 @@ export async function logIntegrationStatus(): Promise<void> {
   }
   if (!python3) {
     log.warn("python3 not found — field length validation/padding will be skipped for every generation.");
+  }
+  if (!checkDspAnalysisAvailable()) {
+    log.warn("DSP analysis venv/model not found — audio features will stay estimate-only (description/GetSongBPM/AI-knowledge). See artifacts/api-server/requirements-audio.txt and data/models/.");
   }
 }

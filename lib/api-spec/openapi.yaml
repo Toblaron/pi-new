@@ -175,6 +175,9 @@ components:
         aiConfigured:
           type: boolean
           description: Whether an AI provider API key is configured
+        dspAnalysisAvailable:
+          type: boolean
+          description: Whether the real DSP audio-analysis venv and YAMNet model are present
       required:
         - status
     ConfirmedStructureSection:
@@ -405,16 +408,55 @@ components:
           description: Detected time signature (e.g. "4/4")
         source:
           type: string
-          enum: [description, getsongbpm, ai-knowledge]
+          enum: [description, getsongbpm, ai-knowledge, dsp-measured]
           description: >
             Where this came from — "description" (parsed from the video description),
-            "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own
-            knowledge of the song, least reliable). Not measured from real audio.
+            "getsongbpm" (GetSongBPM API lookup), "ai-knowledge" (the AI's own knowledge
+            of the song, least reliable), or "dsp-measured" (real signal analysis of a
+            downloaded audio sample — tempo tracking, chroma-based key detection, and a
+            pretrained instrument classifier). Only "dsp-measured" is an actual
+            measurement; the others are text-based estimates.
         confidence:
           type: number
           minimum: 0
           maximum: 1
           description: Confidence in the detected value, reflecting source quality — not a measurement
+        dominantChords:
+          type: array
+          description: >
+            Only present when source is "dsp-measured". The track's recurring harmonic
+            centers by time-share — NOT a bar-by-bar chord progression (per-beat chord
+            estimation is too noisy to present as a reliable transcription; this
+            summarizes which chords the song spends the most time on).
+          items:
+            type: object
+            properties:
+              chord:
+                type: string
+                description: e.g. "Cmaj", "F#min"
+              weight:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Fraction of analyzed beats closest to this chord
+            required: [chord, weight]
+        instruments:
+          type: array
+          description: >
+            Only present when source is "dsp-measured". Instrument tags from a
+            pretrained audio classifier (YAMNet) run on the actual downloaded audio,
+            filtered to a curated instrument subset of its label set.
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: e.g. "Electric guitar", "Drum machine", "Synthesizer"
+              confidence:
+                type: number
+                minimum: 0
+                maximum: 1
+            required: [name, confidence]
       required:
         - bpm
         - key

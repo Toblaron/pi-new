@@ -7,7 +7,7 @@
  */
 
 /**
- * Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), or "ai-knowledge" (the AI's own knowledge of the song, least reliable). Not measured from real audio.
+ * Where this came from — "description" (parsed from the video description), "getsongbpm" (GetSongBPM API lookup), "ai-knowledge" (the AI's own knowledge of the song, least reliable), or "dsp-measured" (real signal analysis of a downloaded audio sample — tempo tracking, chroma-based key detection, and a pretrained instrument classifier). Only "dsp-measured" is an actual measurement; the others are text-based estimates.
 
  */
 export type AudioFeaturesSource =
@@ -17,4 +17,5 @@ export const AudioFeaturesSource = {
   description: "description",
   getsongbpm: "getsongbpm",
   "ai-knowledge": "ai-knowledge",
+  "dsp-measured": "dsp-measured",
 } as const;

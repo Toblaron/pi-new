@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { GenerateSunoTemplateBody, GenerateSunoTemplateResponse, GenerateVariationsBody, BatchGenerateBody, TransformTemplateBody } from "@workspace/api-zod";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import ytdl from "@distube/ytdl-core";
-import { detectAudioFeatures, type AudioFeatures } from "../lib/audioFeatures.js";
+import { detectAudioFeatures, dspResultToAudioFeatures, type AudioFeatures } from "../lib/audioFeatures.js";
+import { analyzeAudioDsp, checkDspAnalysisAvailable } from "../lib/dspAnalysis.js";
 import { analyzeLyricsStructure } from "../lib/lyricsStructure.js";
 import { computeSuggestedDefaults } from "../lib/suggestedDefaults.js";
 import { cacheGet, cacheSet, cacheStats, hashParams, TTL } from "../lib/cache.js";
@@ -859,26 +860,60 @@ async function generateOneTemplate(
 
   onStage?.("metadata");
 
-  // Stage 2: audio features (permanent cache)
+  // Stage 2: audio features (permanent cache). Real DSP measurement (dsp-measured) is the
+  // highest tier — once achieved for a video it's never redone. A cache entry from the fast
+  // estimate chain (description/getsongbpm/ai-knowledge) is NOT a terminal cache hit: the first
+  // real generation for that video still attempts real DSP once and upgrades the entry.
   let audioFeatures: AudioFeatures | undefined;
   let featuresFromCache = false;
   if (videoId) {
     const cached = cacheGet<CachedAudioFeatures>(`features:${videoId}`);
-    if (cached) {
-      audioFeatures = cached.features ?? undefined;
+    if (cached?.features?.source === "dsp-measured") {
+      audioFeatures = cached.features;
       featuresFromCache = true;
-      console.log(`[cache] features HIT for ${videoId}`);
+      console.log(`[cache] features HIT (dsp-measured) for ${videoId}`);
     } else {
-      const result = await detectAudioFeatures({
-        artist: base.cleanArtist,
-        title: base.cleanTitle,
-        youtubeUrl,
-        descriptionBpm: base.descriptionData?.bpm,
-        descriptionKey: base.descriptionData?.key,
-      });
-      audioFeatures = result ?? undefined;
-      cacheSet<CachedAudioFeatures>(`features:${videoId}`, { features: result }, TTL.FEATURES);
-      console.log(`[cache] features SET for ${videoId} (permanent)`);
+      let dspFeatures: AudioFeatures | undefined;
+      if (checkDspAnalysisAvailable()) {
+        let audioPath: string | null = null;
+        try {
+          audioPath = await downloadAudioSample(youtubeUrl);
+          if (audioPath) {
+            const dspResult = await analyzeAudioDsp(audioPath);
+            if (dspResult) {
+              dspFeatures = dspResultToAudioFeatures(dspResult);
+              console.log(`[dsp] measured ${dspFeatures.bpm} BPM, ${dspFeatures.key} (${dspFeatures.instruments?.length ?? 0} instruments, ${dspFeatures.dominantChords?.length ?? 0} dominant chords) for ${videoId}`);
+            }
+          }
+        } catch (err) {
+          console.warn("[dsp] analysis failed:", (err as Error).message?.slice(0, 120));
+        } finally {
+          if (audioPath) await cleanupAudioSample(audioPath);
+        }
+      }
+
+      if (dspFeatures) {
+        audioFeatures = dspFeatures;
+        cacheSet<CachedAudioFeatures>(`features:${videoId}`, { features: dspFeatures }, TTL.FEATURES);
+        console.log(`[cache] features SET (dsp-measured) for ${videoId} (permanent)`);
+      } else if (cached) {
+        // DSP unavailable or failed this time, but a fast estimate is already cached — use it
+        // rather than redoing the estimate chain (and try DSP again on a future request).
+        audioFeatures = cached.features ?? undefined;
+        featuresFromCache = true;
+        console.log(`[cache] features HIT (estimate, dsp unavailable) for ${videoId}`);
+      } else {
+        const result = await detectAudioFeatures({
+          artist: base.cleanArtist,
+          title: base.cleanTitle,
+          youtubeUrl,
+          descriptionBpm: base.descriptionData?.bpm,
+          descriptionKey: base.descriptionData?.key,
+        });
+        audioFeatures = result ?? undefined;
+        cacheSet<CachedAudioFeatures>(`features:${videoId}`, { features: result }, TTL.FEATURES);
+        console.log(`[cache] features SET (estimate) for ${videoId} (permanent)`);
+      }
     }
   } else {
     const result = await detectAudioFeatures({

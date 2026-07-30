@@ -31,12 +31,42 @@ Deezer's public API (`https://api.deezer.com/search?q=artist:"X" track:"Y"`) nee
 
 **Risk to plan around**: server-side YouTube audio download is subject to YouTube bot detection/throttling — keep it best-effort with a hard timeout, never on the critical path, and cache the result permanently per videoId.
 
-### 1c. Real DSP tempo/key analysis as a background job (~2 sessions)
-Once 1b downloads audio anyway, actual measurement becomes possible:
-- **Tempo**: `aubio` CLI (`apt install aubio-tools`, `aubio tempo file.wav`) — light enough for a Pi.
-- **Key**: `keyfinder-cli` (may need building) or a small Python script with `librosa` (heavier; acceptable in a background job).
-- Run it via the **existing** `lib/jobQueue.ts` (see Phase 2a) so a slow analysis never blocks a request. On completion, overwrite the permanent `features:{videoId}` cache entry with `source: "dsp", confidence: 0.95` — the next generation for that track uses measured values.
-- `SongDnaPanel.tsx` already displays feature source — measured values will be visibly distinguished with no frontend work.
+### 1c. Real DSP tempo/key/chord/instrument analysis — DONE (2026-07-30)
+Implemented once the YouTube CDN block cleared (new router/IP) and `@distube/ytdl-core`'s
+broken stream extraction was replaced with `yt-dlp` for downloads (see the fix note above 1a).
+Spike-tested on the actual Pi 5 before committing to the approach — real numbers, not estimates:
+
+- **Stack**: `artifacts/api-server/.venv-audio` (gitignored, ~550MB, `requirements-audio.txt`) —
+  `numpy`/`scipy`/`librosa`/`soundfile` install as clean prebuilt ARM64 wheels, no compilation.
+  `ffmpeg` installed system-wide via apt (needed for fast format decode — librosa's fallback
+  decoder is ~8x slower without it). `ai-edge-litert` (Google's actively-maintained TFLite
+  successor; `tflite-runtime` has no current wheel) runs YAMNet, a 16MB pretrained AudioSet
+  classifier (`data/models/yamnet.tflite` + `yamnet_class_map.csv`, gitignored, fetched once).
+- **Tempo**: `librosa.beat.beat_track` — measured 112.3 BPM on a known ~113 BPM test track.
+- **Key**: Krumhansl-Schmuckler profile correlation (24 candidate keys) against beat-averaged
+  chroma (`chroma_cqt`) — classical technique, no ML model needed.
+- **Chords**: per-beat chroma vs. 24 major/minor triad templates. Raw per-beat labels flicker
+  almost every beat on real audio (verified empirically — not musically plausible), so this is
+  median-smoothed and reported as **dominant chords by time-share**, not a bar-by-bar
+  progression. Honest about the limitation: no 7ths/extensions/inversions.
+- **Instruments**: YAMNet inference, **peak** (not mean) score per class — mean is dominated by
+  genre/mood classes ("Music", "Pop music") that share YAMNet's 521-class space with actual
+  instruments; peak surfaces real but brief instrumental bursts. Filtered to a curated ~50-label
+  instrument subset. Verified against a known track: correctly flagged `Synthesizer`/`Drum
+  machine` (peaks 0.22/0.27), correctly stayed silent on absent instruments (no guitar/piano
+  false positives).
+- **Pipeline**: `analyze_audio.py` (spawned like `validate_chars.py`, JSON in/out) →
+  `lib/dspAnalysis.ts` → wired into `generateOneTemplate`'s Stage 2 in `routes/suno.ts`. Runs
+  **synchronously, blocking**, only on a genuine cache miss for `source !== "dsp-measured"` —
+  the permanent `features:{videoId}` cache means this is a one-time ~10-15s cost per song, never
+  repeated. `/pre-analyze-structure`'s opportunistic cache warm stays on the fast estimate chain
+  only (never triggers DSP) so the paste-preview flow stays instant.
+- **Known inefficiency, not fixed**: if a video both needs the AcoustID fallback (messy title)
+  and is a first-time DSP analysis, audio is downloaded twice in the same request (~3-5s extra).
+  Rare combination; not worth the cross-function temp-file-lifetime complexity to fix.
+- Surfaced in `TemplateResult.tsx`'s header badge (key/BPM/instruments/dominant chords, all
+  honestly labeled "measured" vs the estimate tiers' existing "estimated" framing) and in the
+  `AudioFeatures` OpenAPI schema (`source: dsp-measured`, `dominantChords`, `instruments`).
 
 ---
 
