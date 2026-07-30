@@ -1,76 +1,55 @@
-import ytdl from "@distube/ytdl-core";
-import { createWriteStream } from "fs";
-import { unlink } from "fs/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { readdir, unlink } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import log from "./logger.js";
 
+const execFileAsync = promisify(execFile);
 const DOWNLOAD_TIMEOUT_MS = 25000;
 // fpcalc's default fingerprint window is 120s — a low-bitrate audio-only stream comfortably
-// fits that in a few MB, so this cap is a safety net, not a real constraint in practice.
-const MAX_BYTES = 6 * 1024 * 1024;
+// fits that in a few MB, so this cap (yt-dlp's --max-filesize) is a safety net, not a real
+// constraint in practice.
+const MAX_FILESIZE = "8M";
 
 /**
- * Downloads a short audio-only sample of a YouTube video to a temp file for fingerprinting.
- * Best-effort: returns null on any failure (network, no audio-only format, timeout, etc.) rather
- * than throwing — this must never block the main generation pipeline. Callers must delete the
+ * Downloads a short audio-only sample of a YouTube video to a temp file for fingerprinting, via
+ * the yt-dlp binary (must be on PATH — @distube/ytdl-core cannot extract playable stream URLs
+ * against YouTube's current player and is only used elsewhere for metadata lookups).
+ * Best-effort: returns null on any failure (network, missing binary, timeout, etc.) rather than
+ * throwing — this must never block the main generation pipeline. Callers must delete the
  * returned path with cleanupAudioSample() when done.
  */
 export async function downloadAudioSample(url: string): Promise<string | null> {
-  const tempPath = join(tmpdir(), `ttmpl-audio-${randomUUID()}.tmp`);
+  const stem = `ttmpl-audio-${randomUUID()}`;
+  const tempPath = join(tmpdir(), `${stem}.%(ext)s`);
 
-  return new Promise((resolve) => {
-    let settled = false;
-    let bytesWritten = 0;
+  try {
+    await execFileAsync(
+      "yt-dlp",
+      [
+        "-f",
+        "worstaudio/worst",
+        "--no-playlist",
+        "--no-warnings",
+        "--max-filesize",
+        MAX_FILESIZE,
+        "-o",
+        tempPath,
+        url,
+      ],
+      { timeout: DOWNLOAD_TIMEOUT_MS },
+    );
+  } catch (err) {
+    log.warn("[audioDownload] yt-dlp failed", (err as Error).message?.slice(0, 200));
+    return null;
+  }
 
-    const finish = (result: string | null) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => {
-      stream.destroy();
-      finish(null);
-    }, DOWNLOAD_TIMEOUT_MS);
-
-    let stream: ReturnType<typeof ytdl>;
-    try {
-      stream = ytdl(url, { filter: "audioonly", quality: "lowestaudio" });
-    } catch (err) {
-      clearTimeout(timer);
-      log.warn("[audioDownload] failed to start stream", err);
-      finish(null);
-      return;
-    }
-
-    const writeStream = createWriteStream(tempPath);
-
-    stream.on("data", (chunk: Buffer) => {
-      bytesWritten += chunk.length;
-      if (bytesWritten >= MAX_BYTES) {
-        stream.unpipe(writeStream);
-        stream.destroy();
-        writeStream.end();
-      }
-    });
-
-    stream.on("error", (err) => {
-      log.warn("[audioDownload] stream error", (err as Error).message?.slice(0, 120));
-      writeStream.end();
-      finish(null);
-    });
-
-    writeStream.on("finish", () => finish(tempPath));
-    writeStream.on("error", (err) => {
-      log.warn("[audioDownload] write error", err);
-      finish(null);
-    });
-
-    stream.pipe(writeStream);
-  });
+  // yt-dlp substitutes %(ext)s with the actual container extension (m4a, webm, ...); find it.
+  const files = await readdir(tmpdir());
+  const match = files.find((f) => f.startsWith(stem));
+  return match ? join(tmpdir(), match) : null;
 }
 
 export async function cleanupAudioSample(path: string): Promise<void> {
