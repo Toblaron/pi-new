@@ -3,9 +3,11 @@ import { createReadStream } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { readFileSync } from "fs";
+import { timingSafeEqual } from "crypto";
 import { cacheStats, db } from "../lib/cache.js";
 import { getUsageStats } from "../lib/costTracker.js";
 import { claimNextJob } from "../lib/jobQueue.js";
+import log from "../lib/logger.js";
 
 let resolvedFilename: string;
 try {
@@ -25,7 +27,21 @@ const tagDictionary = JSON.parse(readFileSync(tagDictionaryPath, "utf-8")) as {
 
 const router: IRouter = Router();
 
-// Auth middleware — only applied if ADMIN_KEY is set
+// Auth middleware — only applied if ADMIN_KEY is set. If unset, /admin/* (including
+// /admin/backup, a full raw DB download) is completely open — see the startup warning below.
+if (!process.env.ADMIN_KEY) {
+  log.warn("ADMIN_KEY is not set — /api/admin/* is unauthenticated, including /admin/backup (full database download). Set ADMIN_KEY if this server is reachable beyond a trusted LAN.");
+}
+
+function tokensMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  // Length must match for timingSafeEqual — comparing lengths first is a negligible,
+  // widely-accepted leak (it doesn't reveal any byte of the actual secret).
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 function adminAuth(req: Request, res: Response, next: NextFunction): void {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey) {
@@ -38,7 +54,7 @@ function adminAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
   const token = authHeader.slice(7);
-  if (token !== adminKey) {
+  if (!tokensMatch(token, adminKey)) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }

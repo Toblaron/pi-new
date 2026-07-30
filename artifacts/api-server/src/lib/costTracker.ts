@@ -38,14 +38,26 @@ const queryStats = db.prepare<[number]>(`
   GROUP BY model
 `);
 
-/** Pricing per 1k tokens: [inputPer1k, outputPer1k] */
+/**
+ * Pricing per 1k tokens: [inputPer1k, outputPer1k]. Approximate, may drift from current
+ * provider pricing pages — this is an estimate, not a billing-accurate figure.
+ */
 const MODEL_PRICING: Record<string, [number, number]> = {
-  "gpt-5.2":       [0.015,  0.060],
-  "gpt-4o":        [0.0025, 0.010],
+  // OpenAI
+  "gpt-5.2":       [0.015,   0.060],
+  "gpt-4o":        [0.0025,  0.010],
   "gpt-4o-mini":   [0.00015, 0.0006],
-  "gpt-4.1":       [0.002,  0.008],
-  "gpt-4.1-mini":  [0.0004, 0.0016],
-  "gpt-4.1-nano":  [0.0001, 0.0004],
+  "gpt-4.1":       [0.002,   0.008],
+  "gpt-4.1-mini":  [0.0004,  0.0016],
+  "gpt-4.1-nano":  [0.0001,  0.0004],
+  // Google Gemini — the documented .env.example default provider
+  "gemini-flash-latest":      [0.0003, 0.0025],
+  "gemini-flash-lite-latest": [0.0001, 0.0004],
+  "gemini-2.0-flash":         [0.0001, 0.0004],
+  "gemini-2.5-flash":         [0.0003, 0.0025],
+  // Groq — the documented free-tier alternative provider
+  "llama-3.1-8b-instant":    [0.00005, 0.00008],
+  "llama-3.3-70b-versatile": [0.00059, 0.00079],
 };
 
 function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
@@ -54,8 +66,10 @@ function estimateCost(model: string, promptTokens: number, completionTokens: num
     const [inputRate, outputRate] = pricing;
     return (promptTokens / 1000) * inputRate + (completionTokens / 1000) * outputRate;
   }
-  // Unknown model — flat $0.01/1k total tokens
-  return ((promptTokens + completionTokens) / 1000) * 0.01;
+  // Unknown model — conservative low-cost estimate. The old flat $0.01/1k default was an
+  // OpenAI-GPT-4o-tier rate; most alternative providers (Gemini, Groq) are far cheaper, so
+  // defaulting to that rate silently overstated cost by 10-100x for unrecognized models.
+  return ((promptTokens + completionTokens) / 1000) * 0.001;
 }
 
 export function trackUsage(

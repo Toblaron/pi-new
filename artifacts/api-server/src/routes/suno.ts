@@ -944,11 +944,6 @@ async function generateOneTemplate(
 
   const context = buildPromptContext(metadata);
   const effectiveVocalGender = isInstrumental ? "no vocals" : vocalGender;
-  // Computed server-side from the full rating history (works across devices, can't be spoofed
-  // by a client) — the client-supplied feedbackContext field is accepted for API compatibility
-  // but no longer trusted for biasing the prompt.
-  const serverFeedbackContext = computeFeedbackContext();
-  const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext ?? feedbackContext });
 
   const lyricsInstruction =
     metadata.lyricsSource === "user-override"
@@ -989,6 +984,14 @@ async function generateOneTemplate(
   // Total API calls per generation: 1 (was up to 5).
 
   const runAiCall = async (): Promise<AiOutput> => {
+    // Computed lazily (only reached on a template-cache miss) since it costs a SQLite query
+    // over the full rating history — no point paying that on every cache-hit request,
+    // especially for high-fanout callers like /batch and /multi-track.
+    // Server-side from the full rating history (works across devices, can't be spoofed by a
+    // client) — the client-supplied feedbackContext field is accepted for API compatibility
+    // but no longer trusted for biasing the prompt.
+    const serverFeedbackContext = computeFeedbackContext();
+    const styleControls = buildStyleControls({ vocalGender: effectiveVocalGender, energyLevel, era, genreNudge, genres, moods, instruments, tempo, excludeTags, variationIndex, feedbackContext: serverFeedbackContext ?? feedbackContext });
 
     const singleCallPrompt = `You are SONIC ARCHITECT. Generate a complete SONIC ARCHITECT template for the song below. Output ONLY the delimiter blocks shown — no preamble, no commentary.
 
