@@ -2,9 +2,11 @@
 
 Grounded in a full audit of the codebase (started 2026-07-30, updated same day after a full implementation + bughunt pass). Every item references real files and real, verified gaps — no speculative features. Ordered by value-per-effort. Each phase is independently shippable.
 
-**Status at a glance**: Phases 0, 1a, 1b, 1c, 2b, 2c, 2d, 3a, 4a, 4b, 5, and a critical bugfix pass are all DONE and deployed (commits through `87beec9`). Remaining open work is Phase 2a (job queue — low priority now), Phase 3b/3c/3d (frontend UX), and the new Phase 6 polish list below, which is the current priority.
+**Status at a glance**: Phases 0, 1a, 1b, 1c, 2b, 2c, 2d, 3a, 4a, 4b, 5, a critical bugfix pass, and Phase 6a-6e are all DONE and deployed (commits through `37b05cd`). Remaining open work is Phase 2a (job queue — low priority), Phase 3b/3c/3d (frontend UX), and 6f/6g (partially done — see below).
 
-**Environment note for whoever picks this up next**: no browser-testing tool was available for this entire session — every frontend change was verified via typecheck + production build + bundle-content grep only, never interactively clicked. `/chrome` (Claude in Chrome extension) was checked and is not connected. If you have browser access, prioritize re-verifying the frontend items below (3b especially) with actual interaction before trusting them further, and do a real mobile-viewport pass — that has never been checked at all.
+**Environment update (2026-07-30, same day)**: Claude in Chrome got connected mid-session (`google-chrome-stable` installed on the Pi itself — it does have a real ARM64 build now — plus a full LXDE desktop environment). Everything in Phase 6a-6e above was verified **live**, not just via typecheck/build: actual clicks, actual generations, actual server logs cross-referenced with actual rendered UI. This is a meaningfully more reliable verification bar than earlier phases in this doc, which relied on typecheck/build/grep only — worth knowing when weighing how much to trust older "DONE" markers vs these newer ones.
+
+**Known testing limitation, still open**: window resize (`resize_window`) does not work in this environment — it reports success but `window.innerWidth` never actually changes (openbox/LXDE window-manager quirk on this specific Pi setup, not investigated further). This blocks live mobile-viewport screenshot testing. 6f below used code-level evidence instead (grepped for responsive Tailwind classes) since live testing wasn't possible — real signal, but not the same confidence level as an actual screenshot. If a future session gets window resize working (or tests from an actual phone on the LAN), re-verify 6f properly.
 
 ---
 
@@ -125,26 +127,28 @@ Triggered by a "Language detected: Russian/Korean" anomaly noticed in production
 
 Grounded in verified findings, not speculation — each item below was checked against real logs/code before being listed.
 
-### 6a. DSP progress stage in the SSE stream (~small)
-`GenerationStage` in `routes/suno.ts` is `"metadata" | "lyrics" | "ai-generating" | "validating" | "done"` — the ~10-15s blocking DSP analysis (1c) happens between the `metadata` and `lyrics` stages with no stage of its own. During that wait the UI shows no change, which reads as hung. Add a `"dsp-analysis"` stage, emit it right before `analyzeAudioDsp()` is called, and give it a distinct message in the frontend's `LoadingEq`/stage renderer (e.g. "Analyzing real audio — tempo, key, instruments…").
+### 6a. DSP progress stage in the SSE stream — DONE
+Added `"dsp-analysis"` to `GenerationStage`, emitted right before `analyzeAudioDsp()` runs, distinct message in `LoadingEq`. Verified live: 5 real generations against previously-unseen videos, confirmed via server logs that DSP genuinely ran each time (15-30s), confirmed the final rendered result correctly shows the "measured" badge, detected instruments, and dominant chords.
 
-### 6b. Style prompt chronically undershoots its length target (~small-medium)
-Verified: checked the last 6 hours of production logs, 4 of 5 generations landed *below* the 900-999 char `styleOfMusic` target (775-850 chars). `validate_chars.py` has real padding logic for `lyrics` when it's too short, but `styleOfMusic`/`negativePrompt` just get flagged `"styleOfMusic too short after padding: N chars (need 900–999)"` as an **unfixable** error and shipped short anyway. Two possible fixes, not mutually exclusive: (1) strengthen the AI prompt instruction with an explicit minimum-character reminder and maybe a retry-once-if-short loop before falling to the Python validator, or (2) give the Python validator real expansion logic for `styleOfMusic` (append additional real production-detail clauses, same spirit as the lyrics padding pool) instead of just flagging the shortfall.
+### 6b. Style prompt chronically undershoots its length target — DONE
+Root cause confirmed: LLMs are unreliable at hitting exact character counts by instruction alone — the prompt already said "Fill to 900+ characters — do not stop short" explicitly, strengthening the wording further wasn't going to fix it reliably. Gave `validate_chars.py` real expansion logic for `styleOfMusic` (`pad_style_prompt()`, mirroring `pad_lyrics()`) — a rotating pool of generic-but-plausible mix/master engineering clauses appended until the target is reached. Verified live: a real generation that produced 781 chars was padded to 933 and correctly marked `ok=true`.
 
-### 6c. Compress the logo asset (~trivial)
-`artifacts/suno-generator/src/assets/logo-track-template.jpg` is 2.5MB, shipped uncompressed to every visitor. Convert to WebP or re-encode at reasonable quality/dimensions — should land well under 200KB with no visible difference at the sizes it's actually displayed.
+### 6c. Compress the logo asset — DONE
+Actual file was `logotracktemplateBilde-...jpeg`, 5626×850px, 2.5MB, displayed at 56-64px tall. Re-encoded via `ffmpeg` to a 200px-tall WebP: 2.5MB → 36KB. Old file removed (confirmed nothing else referenced it). Verified visually live — after discovering the app's service worker serves a stale cached bundle across rebuilds (expected PWA behavior; unregister + clear caches + reload to see real current state when testing this app going forward).
 
-### 6d. Code-split the frontend bundle (~small-medium)
-Every production build warns `dist/public/assets/index-*.js  1,110.44 kB │ gzip: 319.57 kB` exceeds the 500kB chunk-size guidance — this has been true throughout the session and was never addressed. Candidates for `dynamic import()`: `BatchDashboard`, `AnalyticsDashboard`, `VariationWorkshop`, `MultiTrackBuilder`, `TransitionBuilder` — all secondary views not needed on first paint.
+### 6d. Code-split the frontend bundle — DONE
+`React.lazy` + `Suspense` for `BatchDashboard`, `VariationWorkshop`, `AnalyticsDashboard`, `MultiTrackBuilder`, `TransitionBuilder` — none render on first paint. Main bundle: 1,110KB → 681KB (gzip 319KB → 203KB). `AnalyticsDashboard` alone split out to 386KB — likely a charting dependency that was bloating every page load regardless of whether the panel was ever opened. Verified live: fresh page load, no console errors, Analytics panel expands and renders correctly from its lazy chunk.
 
-### 6e. Connect DSP data into `/api/suggest` when it already exists (~medium)
-`/api/suggest` (used for the UI's suggested style controls right after pasting a link) guesses `instruments`/`tempo` purely via AI, even for videos that already have real `dsp-measured` data sitting in the permanent `features:{videoId}` cache from a prior generation. It structurally can't check — it only takes `title`/`artist` query params, no video ID. Needs a signature change (`youtubeUrl` or `videoId` optional param) plus a mapping table from YAMNet's raw AudioSet instrument labels to `/suggest`'s constrained `INSTRUMENT_LIST` vocabulary (they don't match 1:1 — e.g. `"Drum machine"`/`"Sampler"` vs. the UI's `"808"`/`"Synth"`). Do **not** trigger new DSP analysis from `/suggest` itself — it must stay fast for the paste-preview flow; only use data that's already cached.
+### 6e. Connect DSP data into `/api/suggest` when it already exists — DONE
+Added optional `youtubeUrl` param; when the video's `features:{videoId}` cache already holds `dsp-measured` data, real measurements now win over the AI guess: `bpmToTempoBucket()` for tempo, `mapDspInstrumentsToSuggestVocab()` for instruments (YAMNet's AudioSet labels don't match `/suggest`'s `INSTRUMENT_LIST` 1:1 — e.g. `"Drum machine"` → `"808"` — labels with no reasonable equivalent are dropped, not guessed at). Never triggers new analysis from `/suggest` itself. New `lib/dspSuggestionMapping.ts` + `.test.ts` (7 tests). Verified live: a video with real cached data (172 BPM, top instrument "Drum machine") produced `tempo: "hyper"` and instruments led by `808,Drums,Synth,Bass,Acoustic Guitar`, log line confirms `dsp-measured data used`.
 
-### 6f. Mobile responsiveness — untested, unknown state
-Never verified in an actual browser at a mobile viewport this session. Do this once browser access exists, before claiming any UX polish is complete.
+**Bug spotted along the way, not fixed (out of scope for 6e)**: `/suggest` returned `era: "2000s"` for a-ha's "Take On Me" (actually 1985). Unrelated to DSP — era comes from MusicBrainz year lookup or AI guessing, not measured. Worth its own investigation.
 
-### 6g. Degraded-mode UX — untested, unknown state
-What does the app actually look/feel like with no optional API keys configured and DSP unavailable? Every source fails gracefully server-side (confirmed in code), but the *user-facing* experience of an all-estimates, no-DSP, no-Genius run has never been walked through end-to-end.
+### 6f. Mobile responsiveness — PARTIALLY DONE (code-level only, live testing blocked)
+Live mobile-viewport screenshot testing is blocked by the `resize_window` issue noted above. Fell back to code-level evidence: only 8 total responsive-prefix (`sm:`/`md:`/`lg:`/`xl:`) Tailwind classes exist across the entire 3,400-line `Home.tsx`. Concretely, `grid grid-cols-2 gap-4` (Vocals/Energy and Tempo/Era sections, `Home.tsx:2440` and `:2476`) has no responsive override to collapse to a single column on narrow screens — real evidence of a likely rough edge on phone-width viewports, though not visually confirmed. Chip/tag grids (genres, moods, instruments) use flexbox wrap without explicit breakpoints, which likely degrades more gracefully. **Re-verify with an actual screenshot once window resize works, or test from a real phone on the LAN** — this write-up is inference from code, not observation.
+
+### 6g. Degraded-mode UX — still not done
+What does the app actually look/feel like with no optional API keys configured and DSP unavailable? Every source fails gracefully server-side (confirmed in code), but the *user-facing* experience of an all-estimates, no-DSP, no-Genius run has never been walked through end-to-end. Would require temporarily unsetting keys on the live service and restarting — deferred rather than doing that unprompted to a running production box.
 
 ---
 
@@ -157,5 +161,5 @@ What does the app actually look/feel like with no optional API keys configured a
 
 ## Suggested order of execution from here
 
-**6a → 6c → 6b → 6d → 3b (once browser access exists) → 3c → 3d → 6e → 2b (incremental, ongoing) → 6f/6g (verification, needs browser) → 4c → 2a (only if something new needs it).**
-Rationale: 6a/6c are small, high-visibility, zero-risk wins — do them first. 6b is a real data-quality bug worth fixing before more feature work sits on top of it. 3b should happen before any further `Home.tsx` UX work (3c, 3d) so those land on a cleaner base, but needs browser verification first — everything before it in this list doesn't. 6e is the biggest single item and depends on nothing else being done first, so it can slot in whenever there's a free session.
+All of Phase 6a-6e are done. Remaining: **3b (browser access now exists — do this first, it's the prerequisite for 3c/3d) → 3c → 3d → 6g (degraded-mode walkthrough) → fix the resize_window issue and properly re-verify 6f → the era-detection bug spotted during 6e → 2b (incremental, ongoing) → 4c → 2a (only if something new needs it).**
+Rationale: 3b was explicitly deferred earlier for lack of browser access — that blocker is gone, and it's still the right prerequisite for 3c/3d per the original ordering logic (a cleaner `Home.tsx` base before adding more UX to it). 6g and a real 6f re-verification are cheap now that browser access exists. The era-detection bug is a real, verified inaccuracy but low urgency (cosmetic era tag, not a functional break).
