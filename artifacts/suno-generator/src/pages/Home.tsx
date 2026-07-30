@@ -46,10 +46,9 @@ import {
 } from "lucide-react";
 import { useGenerateSunoTemplate, useGenerateVariations } from "@workspace/api-client-react";
 import type { SunoTemplate, LyricsStructure, SuggestedDefaults, BatchTrackResult, PlaylistTrack, VariationsResponse, VariationSlot } from "@workspace/api-client-react";
+import { lazy, Suspense } from "react";
 import { TemplateResult } from "@/components/TemplateResult";
 import { LyricsStructurePanel, type ConfirmedSection } from "@/components/LyricsStructurePanel";
-import { VariationWorkshop } from "@/components/VariationWorkshop";
-import { BatchDashboard } from "@/components/BatchDashboard";
 import { LoadingEq } from "@/components/LoadingEq";
 import { ExampleGallery } from "@/components/ExampleGallery";
 import { SongDnaPanel } from "@/components/SongDnaPanel";
@@ -60,10 +59,15 @@ import { TheoryTooltips } from "@/components/TheoryTooltips";
 import { TemplateVersionControl } from "@/components/TemplateVersionControl";
 import { ReverseMode } from "@/components/ReverseMode";
 import { GenreGenomeMap } from "@/components/GenreGenomeMap";
-import { AnalyticsDashboard } from "@/components/AnalyticsDashboard";
 import { MoodBoard } from "@/components/MoodBoard";
-import { MultiTrackBuilder } from "@/components/MultiTrackBuilder";
-import { TransitionBuilder } from "@/components/TransitionBuilder";
+
+// Code-split: none of these render on first paint (all behind a mode toggle, batch state,
+// or a collapsed accordion), so there's no reason to ship them in the main bundle.
+const VariationWorkshop = lazy(() => import("@/components/VariationWorkshop").then((m) => ({ default: m.VariationWorkshop })));
+const BatchDashboard = lazy(() => import("@/components/BatchDashboard").then((m) => ({ default: m.BatchDashboard })));
+const AnalyticsDashboard = lazy(() => import("@/components/AnalyticsDashboard").then((m) => ({ default: m.AnalyticsDashboard })));
+const MultiTrackBuilder = lazy(() => import("@/components/MultiTrackBuilder").then((m) => ({ default: m.MultiTrackBuilder })));
+const TransitionBuilder = lazy(() => import("@/components/TransitionBuilder").then((m) => ({ default: m.TransitionBuilder })));
 import { scoreTemplate } from "@/lib/promptScorer";
 import { cn } from "@/lib/utils";
 
@@ -3112,16 +3116,18 @@ export default function Home() {
               exit={{ opacity: 0 }}
               className="w-full max-w-3xl mx-auto px-4 py-4"
             >
-              <BatchDashboard
-                tracks={batchTracks}
-                onRetry={handleBatchRetry}
-                onUseTemplate={(template) => {
-                  setCurrentTemplate(template);
-                  setBatchMode(false);
-                  setBatchTracks(null);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-              />
+              <Suspense fallback={<LoadingEq />}>
+                <BatchDashboard
+                  tracks={batchTracks}
+                  onRetry={handleBatchRetry}
+                  onUseTemplate={(template) => {
+                    setCurrentTemplate(template);
+                    setBatchMode(false);
+                    setBatchTracks(null);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                />
+              </Suspense>
             </motion.div>
           ) : (variationWorkshop && variationWorkshop.length > 0) || (isGeneratingVariations && variationPending.length > 0) ? (
             <motion.div
@@ -3131,13 +3137,15 @@ export default function Home() {
               exit={{ opacity: 0 }}
               className="w-full max-w-6xl mx-auto px-1"
             >
-              <VariationWorkshop
-                variations={variationWorkshop ?? []}
-                pending={variationPending}
-                totalCount={variationPending.length || variationWorkshop?.length || 0}
-                onMerge={handleMergeVariation}
-                onClose={() => { setVariationWorkshop(null); setIsGeneratingVariations(false); setVariationPending([]); }}
-              />
+              <Suspense fallback={<LoadingEq />}>
+                <VariationWorkshop
+                  variations={variationWorkshop ?? []}
+                  pending={variationPending}
+                  totalCount={variationPending.length || variationWorkshop?.length || 0}
+                  onMerge={handleMergeVariation}
+                  onClose={() => { setVariationWorkshop(null); setIsGeneratingVariations(false); setVariationPending([]); }}
+                />
+              </Suspense>
             </motion.div>
           ) : currentTemplate ? (
             <motion.div
@@ -3323,22 +3331,26 @@ export default function Home() {
 
               {/* Multi-Track Arrangement Builder */}
               <div className="max-w-5xl mx-auto w-full mt-4">
-                <MultiTrackBuilder
-                  youtubeUrl={urlValue}
-                  vocalGender={vocalGender === "auto" ? undefined : vocalGender}
-                  energyLevel={energyLevel === "auto" ? undefined : energyLevel}
-                  era={era === "auto" ? undefined : era}
-                  mode={mode ?? undefined}
-                  genres={selectedGenres.length > 0 ? selectedGenres : undefined}
-                  moods={selectedMoods.length > 0 ? selectedMoods : undefined}
-                  instruments={selectedInstruments.length > 0 ? selectedInstruments : undefined}
-                  voices={selectedVoices.length > 0 ? selectedVoices : undefined}
-                />
+                <Suspense fallback={null}>
+                  <MultiTrackBuilder
+                    youtubeUrl={urlValue}
+                    vocalGender={vocalGender === "auto" ? undefined : vocalGender}
+                    energyLevel={energyLevel === "auto" ? undefined : energyLevel}
+                    era={era === "auto" ? undefined : era}
+                    mode={mode ?? undefined}
+                    genres={selectedGenres.length > 0 ? selectedGenres : undefined}
+                    moods={selectedMoods.length > 0 ? selectedMoods : undefined}
+                    instruments={selectedInstruments.length > 0 ? selectedInstruments : undefined}
+                    voices={selectedVoices.length > 0 ? selectedVoices : undefined}
+                  />
+                </Suspense>
               </div>
 
               {/* Transition Builder */}
               <div className="max-w-5xl mx-auto w-full mt-4">
-                <TransitionBuilder />
+                <Suspense fallback={null}>
+                  <TransitionBuilder />
+                </Suspense>
               </div>
 
               {/* Reverse Suno — analyze any template to infer settings */}
@@ -3486,7 +3498,9 @@ export default function Home() {
 
       {/* Analytics Dashboard — always visible at bottom */}
       <div className="w-full max-w-5xl mt-8">
-        <AnalyticsDashboard />
+        <Suspense fallback={null}>
+          <AnalyticsDashboard />
+        </Suspense>
       </div>
 
       {/* Attribution footer — required by GetSongBPM API terms */}
